@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, X, RotateCcw } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { Project } from "@shared/schema";
 
 // Define the interface for mindar and THREE to avoid typescript errors
 declare global {
@@ -25,7 +26,7 @@ export default function ViewProject() {
 
   // Fetch project data
   const projectId = params?.projectId;
-  const { data: project, isLoading: isProjectLoading, error } = useQuery({
+  const { data: project, isLoading: isProjectLoading, error } = useQuery<Project>({
     queryKey: [`/api/projects/${projectId}`],
     enabled: !!projectId,
   });

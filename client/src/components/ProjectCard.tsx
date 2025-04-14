@@ -21,7 +21,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
   const [showAnalytics, setShowAnalytics] = useState(false);
 
   // Fetch analytics data if needed
-  const { data: analytics, isLoading: isLoadingAnalytics } = useQuery({
+  const { data: analytics, isLoading: isLoadingAnalytics } = useQuery<ProjectAnalytics>({
     queryKey: [`/api/projects/${project.id}/analytics`],
     enabled: showAnalytics,
   });
@@ -115,11 +115,11 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <p className="text-xs text-gray-500">Views</p>
-                  <p className="text-sm font-medium">{analytics.viewCount}</p>
+                  <p className="text-sm font-medium">{analytics.viewCount || 0}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Shares</p>
-                  <p className="text-sm font-medium">{analytics.shareCount}</p>
+                  <p className="text-sm font-medium">{analytics.shareCount || 0}</p>
                 </div>
                 {analytics.lastViewed && (
                   <div className="col-span-2">
