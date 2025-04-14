@@ -2,13 +2,12 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Header } from "@/components/Header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { ModelUpload } from "@/components/ui/model-upload";
 import { ImageTargetUpload } from "@/components/ui/image-target-upload";
 import { useToast } from "@/hooks/use-toast";
@@ -55,7 +54,7 @@ export default function CreateProject() {
     if (arType === "markerless" || imageTrackingComplete) completedSteps++;
     
     setProgress(Math.floor((completedSteps / steps) * 100));
-  }, [name, model, targetImage, arType]);
+  }, [name, model, targetImage, arType, detailsComplete, contentComplete, imageTrackingComplete]);
 
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,13 +94,22 @@ export default function CreateProject() {
 
     try {
       // Upload files to Firebase Storage
-      const modelPath = `models/${user?.id}/${Date.now()}_${model.name}`;
+      const userId = user?.id || Date.now().toString(); // Fallback to timestamp if no ID
+      console.log("Uploading with user ID:", userId);
+      
+      // Upload model file
+      const modelPath = `models/${userId}/${Date.now()}_${model.name}`;
+      console.log("Uploading model to path:", modelPath);
       const modelUrl = await uploadFile(model, modelPath);
+      console.log("Model uploaded successfully, URL:", modelUrl);
 
+      // Upload target image if applicable
       let targetImageUrl = "";
       if (arType === "image-tracking" && targetImage) {
-        const imagePath = `target-images/${user?.id}/${Date.now()}_${targetImage.name}`;
+        const imagePath = `target-images/${userId}/${Date.now()}_${targetImage.name}`;
+        console.log("Uploading target image to path:", imagePath);
         targetImageUrl = await uploadFile(targetImage, imagePath);
+        console.log("Target image uploaded successfully, URL:", targetImageUrl);
       }
 
       // Create project in our backend
@@ -465,12 +473,8 @@ export default function CreateProject() {
             </Tabs>
           </div>
           
-          <div className="mt-6 text-center">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => navigate("/dashboard")}
-            >
+          <div className="mt-4 text-center">
+            <Button variant="link" onClick={() => navigate("/dashboard")}>
               Cancel and return to dashboard
             </Button>
           </div>
