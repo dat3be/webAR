@@ -1,0 +1,39 @@
+> rest-express@1.0.0 dev
+12:32:49 PM [express] serving on port 5000
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Database connection successful
+12:32:57 PM [express] GET /api/user 401 in 233ms :: {"message":"Not authenticated"}
+Database connection successful
+12:32:58 PM [express] GET /api/user 401 in 1ms :: {"message":"Not authenticated"}
+Database connection successful
+12:33:04 PM [express] GET /api/user 401 in 1ms :: {"message":"Not authenticated"}
+Database connection successful
+12:35:44 PM [express] GET /api/user 401 in 254ms :: {"message":"Not authenticated"}
+Database connection successful
+Firebase login attempt with body: { firebaseUid: 'firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23' }
+Looking up user with Firebase UID: firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23
+Storage methods: [ 'sessionStore' ]
+All users in database: 2
+First user: {
+  id: 1,
+  username: 'dat3be',
+  password: '6b7cd7e3c52cc16d3e70613f3bbc145c38f5499c8dc5d5dfe7e0cea2d87dc5e83f6ed1bd59a97444d8964e2c1ab1518acc0356028bc52b681e43ef9fae79d531.933a596468533ac58bace9c718503ad1',
+  email: 'dat3be@gmail.com',
+  displayName: 'Dat 3BE',
+  photoURL: null,
+  firebaseUid: 'manual-1744622420694',
+  createdAt: 2025-04-14T09:20:17.761Z
+}
+Users with firebaseUid: 2
+User with matching UID: undefined
+Firebase login failed: User not found with UID: firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23
+12:36:14 PM [express] POST /api/login-with-firebase 404 in 2436ms :: {"message":"User not found"}
+Database connection successful
+Firebase login attempt with body: { firebaseUid: 'firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23' }
+Looking up user with Firebase UID: firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23
+Storage methods: [ 'sessionStore' ]
+All users in database: 0
+Firebase login failed: User not found with UID: firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23
+12:37:06 PM [express] POST /api/login-with-firebase 404 in 383ms :: {"message":"User not found"}

@@ -112,6 +112,60 @@ export default function AuthPage() {
       setIsGoogleLoading(false);
     }
   };
+  
+  // Temporary function to manually simulate Firebase auth for testing
+  const handleTestGoogleSignIn = async () => {
+    if (isGoogleLoading) return;
+    
+    try {
+      setIsGoogleLoading(true);
+      // Create a fake UUID for testing
+      const testFirebaseUid = `firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23`;
+      const testEmail = "test@example.com";
+      const testDisplayName = "Test User";
+      
+      console.log("Manually registering user with Firebase UID:", testFirebaseUid);
+      
+      // Generate username from email + random suffix
+      const emailPrefix = testEmail.split('@')[0];
+      const randomSuffix = Math.floor(Math.random() * 10000);
+      const username = `${emailPrefix}_${randomSuffix}`;
+      
+      // Prepare user data
+      const userData = {
+        username,
+        email: testEmail,
+        password: `firebase_${Date.now()}`,
+        displayName: testDisplayName,
+        firebaseUid: testFirebaseUid
+      };
+      
+      // Register new user directly
+      const response = await fetch('/api/register-with-firebase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Registration failed: ${text}`);
+      }
+      
+      console.log("Test user registered successfully");
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Test registration failed:", error);
+      toast({
+        title: "Test Registration Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
