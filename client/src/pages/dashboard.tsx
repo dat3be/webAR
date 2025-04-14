@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { Plus } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { Project } from "@shared/schema";
+import type { Project } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
@@ -25,7 +25,7 @@ export default function Dashboard() {
   // Fetch projects
   const { data: projects, isLoading, error } = useQuery({
     queryKey: ["/api/projects"],
-    enabled: !!user,
+    enabled: !!user
   });
 
   // Delete project mutation
@@ -149,7 +149,7 @@ export default function Dashboard() {
                       )}
 
                       {/* Project Cards */}
-                      {projects?.map((project: Project) => (
+                      {Array.isArray(projects) && projects.map((project: Project) => (
                         <ProjectCard
                           key={project.id}
                           project={project}

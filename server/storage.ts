@@ -134,20 +134,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProject(insertProject: InsertProject): Promise<Project> {
-    const [project] = await db.insert(projects).values({
-      ...insertProject,
-      updatedAt: new Date()
-    }).returning();
+    console.log("Creating project with data:", insertProject);
     
-    // Initialize analytics record for the project
-    await db.insert(projectAnalytics).values({
-      projectId: project.id,
-      viewCount: 0,
-      shareCount: 0,
-      updatedAt: new Date()
-    });
-    
-    return project;
+    try {
+      const [project] = await db.insert(projects).values({
+        ...insertProject,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }).returning();
+      
+      console.log("Project created successfully:", project);
+      
+      // Initialize analytics record for the project
+      await db.insert(projectAnalytics).values({
+        projectId: project.id,
+        viewCount: 0,
+        shareCount: 0,
+        updatedAt: new Date()
+      });
+      
+      return project;
+    } catch (error) {
+      console.error("Database error creating project:", error);
+      throw error;
+    }
   }
 
   async updateProject(id: number, updates: Partial<Project>): Promise<Project> {

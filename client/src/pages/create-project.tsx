@@ -12,7 +12,7 @@ import { ModelUpload } from "@/components/ui/model-upload";
 import { ImageTargetUpload } from "@/components/ui/image-target-upload";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { uploadFile } from "@/lib/firebase";
+import { uploadFile } from "@/lib/fileUpload";
 import { Loader2, Image, Box, Film, Square } from "lucide-react";
 
 export default function CreateProject() {
@@ -93,22 +93,19 @@ export default function CreateProject() {
     setIsSubmitting(true);
 
     try {
-      // Upload files to Firebase Storage
-      const userId = user?.id || Date.now().toString(); // Fallback to timestamp if no ID
-      console.log("Uploading with user ID:", userId);
+      // Upload files to Wasabi Cloud Storage
+      console.log("Starting file uploads to Wasabi...");
       
       // Upload model file
-      const modelPath = `models/${userId}/${Date.now()}_${model.name}`;
-      console.log("Uploading model to path:", modelPath);
-      const modelUrl = await uploadFile(model, modelPath);
+      console.log("Uploading model file:", model.name);
+      const modelUrl = await uploadFile(model);
       console.log("Model uploaded successfully, URL:", modelUrl);
 
       // Upload target image if applicable
       let targetImageUrl = "";
       if (arType === "image-tracking" && targetImage) {
-        const imagePath = `target-images/${userId}/${Date.now()}_${targetImage.name}`;
-        console.log("Uploading target image to path:", imagePath);
-        targetImageUrl = await uploadFile(targetImage, imagePath);
+        console.log("Uploading target image:", targetImage.name);
+        targetImageUrl = await uploadFile(targetImage);
         console.log("Target image uploaded successfully, URL:", targetImageUrl);
       }
 
@@ -122,6 +119,7 @@ export default function CreateProject() {
         targetImageUrl: targetImageUrl || null,
       });
       
+      // Add status field to the request body with default "active" value
       const response = await apiRequest("POST", "/api/projects", {
         name,
         description,
@@ -129,6 +127,7 @@ export default function CreateProject() {
         contentType,
         modelUrl,
         targetImageUrl: targetImageUrl || null,
+        status: "active", // Ensure status is set properly
       });
       
       console.log("Project created successfully:", response);
