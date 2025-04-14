@@ -45,7 +45,10 @@ export async function uploadFile(file: File): Promise<string> {
     if (file.type.startsWith('model/') || 
         file.name.endsWith('.glb') || 
         file.name.endsWith('.gltf') || 
-        file.size > 50 * 1024 * 1024) {
+        file.name.endsWith('.mp4') || 
+        file.name.endsWith('.webm') || 
+        file.size > 25 * 1024 * 1024) {
+      console.log('[fileUpload] Sử dụng phương thức tải lên qua server do kiểu file hoặc kích thước');
       return await uploadViaServer(file);
     }
     

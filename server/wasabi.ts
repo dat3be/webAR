@@ -37,6 +37,10 @@ export function getWasabiClient(): S3Client {
       endpoint: process.env.WASABI_ENDPOINT
     });
     
+    // Xóa bất kỳ client cũ nào nếu có
+    _wasabiClient = null;
+    
+    // Tạo client mới với cấu hình hiện tại
     _wasabiClient = new S3Client({
       region: process.env.WASABI_REGION!,
       endpoint: `https://${process.env.WASABI_ENDPOINT}`,
@@ -45,12 +49,15 @@ export function getWasabiClient(): S3Client {
         secretAccessKey: process.env.WASABI_SECRET_ACCESS_KEY!,
       },
       forcePathStyle: true, // Sử dụng path-style URLs cho Wasabi
-      // Thêm các tùy chọn bổ sung
+      // Cấu hình timeout và retry tối ưu
       maxAttempts: 5, // Số lần thử lại tối đa
       requestHandler: {
         abortSignal: AbortSignal.timeout(60000), // Timeout dài hơn (60 giây)
       },
     });
+    
+    // Ghi log chi tiết để debug
+    console.log(`[Wasabi] Client created successfully. Using region: ${process.env.WASABI_REGION}, bucket: ${process.env.WASABI_BUCKET_NAME}`);
   }
   return _wasabiClient;
 }
@@ -253,12 +260,18 @@ export async function createPresignedPost(fileName: string, contentType: string,
   console.log(`[Wasabi] Creating presigned post for ${fileName} (${contentType}), key: ${key}`);
   
   try {
-    // Tạo pre-signed URL cho PUT operation
+    // Tạo pre-signed URL cho PUT operation với các tùy chọn bổ sung
     const command = new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       ContentType: contentType,
       ACL: 'public-read',
+      // Thêm các tùy chọn để xử lý tệp đặc biệt
+      CacheControl: 'max-age=31536000', // Cache 1 năm cho tệp tĩnh
+      Metadata: {
+        'x-amz-meta-uploaded-at': new Date().toISOString(),
+        'x-amz-meta-original-name': fileName
+      }
     });
     
     // Mở rộng thời gian hết hạn của URL lên 30 phút

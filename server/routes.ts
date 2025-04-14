@@ -288,6 +288,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { fileName, contentType, folder } = req.body;
       
+      console.log(`[API:PresignedUpload] Received request: fileName=${fileName}, contentType=${contentType}, folder=${folder}`);
+      
       if (!fileName || !contentType) {
         return res.status(400).json({ 
           message: "Thiếu thông tin", 
@@ -295,14 +297,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Xác định thư mục dựa trên loại tệp
+      // Kiểm tra các thông tin về Wasabi
+      console.log(`[API:PresignedUpload] Checking Wasabi configuration`);
+      console.log(`[API:PresignedUpload] WASABI_REGION=${process.env.WASABI_REGION}`);
+      console.log(`[API:PresignedUpload] WASABI_ENDPOINT=${process.env.WASABI_ENDPOINT}`);
+      console.log(`[API:PresignedUpload] WASABI_BUCKET_NAME=${process.env.WASABI_BUCKET_NAME}`);
+      console.log(`[API:PresignedUpload] WASABI_ACCESS_KEY_ID exists: ${Boolean(process.env.WASABI_ACCESS_KEY_ID)}`);
+      console.log(`[API:PresignedUpload] WASABI_SECRET_ACCESS_KEY exists: ${Boolean(process.env.WASABI_SECRET_ACCESS_KEY)}`);
+      
+      // Xác định thư mục dựa trên loại tệp và kiểu file
       let targetFolder = folder || 'misc';
+      
       if (!folder) {
-        if (contentType.startsWith('model/')) {
+        // Nhận diện kiểu file dựa trên contentType hoặc phần mở rộng từ fileName
+        const fileExtension = fileName.split('.').pop()?.toLowerCase();
+        
+        if (contentType.startsWith('model/') || 
+            ['glb', 'gltf'].includes(fileExtension || '')) {
           targetFolder = 'models';
-        } else if (contentType.startsWith('video/')) {
+        } else if (contentType.startsWith('video/') || 
+                  ['mp4', 'webm', 'mov'].includes(fileExtension || '')) {
           targetFolder = 'videos';
-        } else if (contentType.startsWith('image/')) {
+        } else if (contentType.startsWith('image/') || 
+                  ['jpg', 'jpeg', 'png', 'webp'].includes(fileExtension || '')) {
           targetFolder = 'images';
         }
         
@@ -314,18 +331,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[API:PresignedUpload] Tạo presigned URL cho: ${fileName} (${contentType}) đến thư mục: ${targetFolder}`);
       
-      // Tạo presigned URL
-      const presignedData = await createPresignedPost(fileName, contentType, targetFolder);
-      
-      // Lấy URL công khai cho tệp - để sử dụng sau khi tải lên
-      const publicUrls = getPublicUrl(presignedData.key);
-      
-      res.status(200).json({
-        ...presignedData,
-        publicUrls
-      });
+      try {
+        // Tạo presigned URL
+        const presignedData = await createPresignedPost(fileName, contentType, targetFolder);
+        
+        // Lấy URL công khai cho tệp - để sử dụng sau khi tải lên
+        const publicUrls = getPublicUrl(presignedData.key);
+        
+        console.log(`[API:PresignedUpload] Successfully created presigned URL`);
+        console.log(`[API:PresignedUpload] Public URL will be: ${publicUrls.url}`);
+        
+        res.status(200).json({
+          ...presignedData,
+          publicUrls
+        });
+      } catch (wasabiError) {
+        console.error("[API:PresignedUpload] Lỗi khi tạo presigned URL:", wasabiError);
+        
+        // Trả về lỗi chi tiết để giúp debug
+        return res.status(500).json({
+          message: "Không thể tạo presigned URL để tải lên",
+          error: (wasabiError as Error).message,
+          details: "Lỗi kết nối tới Wasabi, vui lòng thử lại hoặc sử dụng phương thức tải lên thông qua server"
+        });
+      }
     } catch (error) {
-      console.error("[API:PresignedUpload] Lỗi:", error);
+      console.error("[API:PresignedUpload] Lỗi chung:", error);
       handleApiError(error, res);
     }
   });
