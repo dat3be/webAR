@@ -12,7 +12,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Loader2, ArrowRight } from "lucide-react";
-import { GoogleLoginButtons } from "@/components/GoogleLoginButtons";
 
 // Define validation schemas for login and registration forms
 const loginSchema = z.object({
@@ -38,7 +37,7 @@ export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<"login" | "register">(initialTab);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toast } = useToast();
-  const { user, loginMutation, registerMutation, loginWithGoogle, testLoginWithFirebase } = useAuth();
+  const { user, loginMutation, registerMutation, loginWithGoogle } = useAuth();
 
   // Create forms
   const loginForm = useForm<LoginFormValues>({
@@ -108,24 +107,6 @@ export default function AuthPage() {
       navigate("/dashboard");
     } catch (error) {
       console.log("Google sign-in failed", error);
-      // Error handling is done in useAuth hook via toast notifications
-    } finally {
-      setIsGoogleLoading(false);
-    }
-  };
-  
-  // Temporary function to manually simulate Firebase auth for testing
-  const handleTestGoogleSignIn = async () => {
-    if (isGoogleLoading) return; // Prevent multiple clicks
-    
-    try {
-      setIsGoogleLoading(true);
-      console.log("Starting test Firebase login process");
-      await testLoginWithFirebase();
-      console.log("Test Firebase login successful, navigating to dashboard");
-      navigate("/dashboard");
-    } catch (error: any) {
-      console.error("Test Firebase login failed:", error);
       // Error handling is done in useAuth hook via toast notifications
     } finally {
       setIsGoogleLoading(false);

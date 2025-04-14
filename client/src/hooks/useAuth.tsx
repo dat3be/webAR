@@ -18,7 +18,6 @@ type AuthContextType = {
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<UserType, Error, RegisterData>;
   loginWithGoogle: () => Promise<any>;
-  testLoginWithFirebase: () => Promise<any>;
 };
 
 type LoginData = {
@@ -143,63 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
-
-  // Test sign-in function using the dedicated test endpoints
-  const testLoginWithFirebase = async () => {
-    try {
-      console.log("Starting TEST firebase login with server-side endpoints");
-      
-      // First, create a test user with our new endpoint
-      console.log("Step 1: Creating test user");
-      const createRes = await fetch('/api/test/create-firebase-user');
-      
-      if (!createRes.ok) {
-        throw new Error(`Failed to create test user: ${createRes.statusText}`);
-      }
-      
-      const createData = await createRes.json();
-      console.log("Server created test user:", createData);
-      
-      // Get the Firebase UID from the response
-      const testFirebaseUid = createData.firebaseUid;
-      
-      if (!testFirebaseUid) {
-        throw new Error("No Firebase UID returned from server");
-      }
-      
-      // Now log in with that user
-      console.log("Step 2: Logging in with test user");
-      const loginRes = await fetch(`/api/test/login-firebase-user?firebaseUid=${testFirebaseUid}`, {
-        credentials: 'include' // Important: this ensures cookies are sent
-      });
-      
-      if (!loginRes.ok) {
-        throw new Error(`Failed to login test user: ${loginRes.statusText}`);
-      }
-      
-      const loginData = await loginRes.json();
-      console.log("Server logged in test user:", loginData);
-      
-      // Update our local state with the user
-      queryClient.setQueryData(["/api/user"], loginData.user);
-      
-      toast({
-        title: "Test Login Successful",
-        description: `Logged in as ${loginData.user.username}`,
-      });
-      
-      // Now the user is logged in
-      return loginData.user;
-    } catch (error: any) {
-      console.error("Test login failed:", error);
-      toast({
-        title: "Test Login Failed",
-        description: error.message || "Error during test login",
-        variant: "destructive",
-      });
-      throw error;
-    }
-  };
 
   // Google sign-in function
   const loginWithGoogle = async () => {
@@ -328,8 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
-        loginWithGoogle,
-        testLoginWithFirebase
+        loginWithGoogle
       }}
     >
       {children}
