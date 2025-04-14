@@ -29,6 +29,10 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 const firestore = getFirestore(app);
 
+// We need to ensure the auth domain is set as the current host
+// This is important for Firebase auth to work properly in certain environments like Replit
+auth.useDeviceLanguage(); // Use browser's language for auth UI
+
 // Authentication functions
 export const loginWithEmail = (email: string, password: string) => {
   return signInWithEmailAndPassword(auth, email, password);
@@ -40,6 +44,14 @@ export const signupWithEmail = (email: string, password: string) => {
 
 export const loginWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
+  // Add scopes if needed
+  provider.addScope('profile');
+  provider.addScope('email');
+  // Set custom parameters for Google Auth
+  provider.setCustomParameters({
+    prompt: 'select_account'
+  });
+  
   return signInWithPopup(auth, provider);
 };
 
@@ -51,9 +63,29 @@ export const updateUserProfile = (user: User, data: { displayName?: string; phot
 
 // Storage functions
 export const uploadFile = async (file: File, path: string) => {
-  const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
-  return getDownloadURL(storageRef);
+  try {
+    const storageRef = ref(storage, path);
+    const snapshot = await uploadBytes(storageRef, file);
+    console.log('Uploaded file successfully:', snapshot);
+    return getDownloadURL(storageRef);
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    throw error;
+  }
+};
+
+// Firestore functions (helpers for CRUD operations)
+export const createDocument = async (collectionName: string, data: any) => {
+  try {
+    const collectionRef = collection(firestore, collectionName);
+    return await addDoc(collectionRef, {
+      ...data,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error(`Error creating document in ${collectionName}:`, error);
+    throw error;
+  }
 };
 
 // Export Firebase instances
