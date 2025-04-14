@@ -119,13 +119,37 @@ export default function AuthPage() {
     
     try {
       setIsGoogleLoading(true);
-      // Create a fake UUID for testing
+      // Create a fake UUID for testing - IMPORTANT: Use exactly this UID from the logs
       const testFirebaseUid = `firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23`;
       const testEmail = "test@example.com";
       const testDisplayName = "Test User";
       
       console.log("Manually registering user with Firebase UID:", testFirebaseUid);
       
+      // First, try logging in with the test Firebase UID
+      try {
+        console.log("Trying to login with Firebase UID first...");
+        const loginResponse = await fetch('/api/login-with-firebase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firebaseUid: testFirebaseUid }),
+          credentials: 'include'
+        });
+        
+        if (loginResponse.ok) {
+          console.log("Firebase login successful, user already exists");
+          const user = await loginResponse.json();
+          console.log("Logged in user:", user);
+          navigate("/dashboard");
+          return;
+        }
+        
+        console.log("Login failed, will try to register a new user");
+      } catch (loginError) {
+        console.log("Login attempt failed, will register instead:", loginError);
+      }
+      
+      // If login fails, register the user
       // Generate username from email + random suffix
       const emailPrefix = testEmail.split('@')[0];
       const randomSuffix = Math.floor(Math.random() * 10000);
@@ -140,20 +164,29 @@ export default function AuthPage() {
         firebaseUid: testFirebaseUid
       };
       
+      console.log("Registering new test user with data:", userData);
+      
       // Register new user directly
-      const response = await fetch('/api/register-with-firebase', {
+      const registerResponse = await fetch('/api/register-with-firebase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
         credentials: 'include'
       });
       
-      if (!response.ok) {
-        const text = await response.text();
+      if (!registerResponse.ok) {
+        const text = await registerResponse.text();
         throw new Error(`Registration failed: ${text}`);
       }
       
-      console.log("Test user registered successfully");
+      const newUser = await registerResponse.json();
+      console.log("Test user registered successfully:", newUser);
+      
+      toast({
+        title: "Success",
+        description: "Test user created and logged in successfully",
+      });
+      
       navigate("/dashboard");
     } catch (error) {
       console.error("Test registration failed:", error);
