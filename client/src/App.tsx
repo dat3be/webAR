@@ -8,15 +8,23 @@ import ViewProject from "@/pages/view-project";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import { ProtectedRoute } from "@/lib/protected-route";
+import { checkRedirectResult } from "@/lib/firebase";
 
 // Wrapper components to fix type issues
 const DashboardWrapper = () => <Dashboard />;
 const CreateProjectWrapper = () => <CreateProject />;
 
 function App() {
-  // Set document title
+  // Set document title and check for redirect results
   useEffect(() => {
     document.title = "ARCreate | WebAR Platform";
+    
+    // Check if user was redirected from Google sign-in
+    checkRedirectResult().then(result => {
+      if (result) {
+        console.log("Found redirect result in App.tsx:", result.user.uid);
+      }
+    });
   }, []);
 
   return (

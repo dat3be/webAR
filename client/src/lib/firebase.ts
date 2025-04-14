@@ -8,7 +8,10 @@ import {
   signOut,
   updateProfile,
   onAuthStateChanged,
-  User
+  User,
+  browserLocalPersistence,
+  setPersistence,
+  getRedirectResult
 } from "firebase/auth";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, getDoc, query, where } from "firebase/firestore";
@@ -23,15 +26,53 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+console.log("Firebase Config:", {
+  apiKey: "HIDDEN",
+  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: "HIDDEN"
+});
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const storage = getStorage(app);
 const firestore = getFirestore(app);
 
-// We need to ensure the auth domain is set as the current host
-// This is important for Firebase auth to work properly in certain environments like Replit
+// Configure Firebase Auth settings
 auth.useDeviceLanguage(); // Use browser's language for auth UI
+
+// Set persistence to local (keeps user signed in between browser sessions)
+setPersistence(auth, browserLocalPersistence)
+  .then(() => {
+    console.log("Firebase persistence set to LOCAL");
+  })
+  .catch((error) => {
+    console.error("Error setting auth persistence:", error);
+  });
+
+// Check for any redirect results on page load
+// This is important for handling redirect sign-in flows
+let redirectChecked = false;
+export const checkRedirectResult = async () => {
+  if (redirectChecked) return null;
+  
+  try {
+    redirectChecked = true;
+    console.log("Checking for redirect results...");
+    const result = await getRedirectResult(auth);
+    if (result) {
+      console.log("Redirect result found:", result.user.uid);
+      return result;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error checking redirect result:", error);
+    return null;
+  }
+};
 
 // Authentication functions
 export const loginWithEmail = (email: string, password: string) => {
@@ -49,6 +90,7 @@ export const loginWithGoogle = async () => {
   // Add scopes if needed
   provider.addScope('profile');
   provider.addScope('email');
+  
   // Set custom parameters for Google Auth
   provider.setCustomParameters({
     prompt: 'select_account'
@@ -56,7 +98,7 @@ export const loginWithGoogle = async () => {
   
   try {
     const result = await signInWithPopup(auth, provider);
-    console.log("Google auth completed successfully");
+    console.log("Google auth successful:", result.user.uid);
     return result;
   } catch (error: any) {
     console.error("Firebase Google auth error:", error);
