@@ -161,48 +161,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const firebaseId = `firebase-${firebaseUser.uid}`;
           console.log("Attempting to login with Firebase UID:", firebaseId);
           
-          const res = await apiRequest("POST", "/api/login-with-firebase", {
-            firebaseUid: firebaseId
-          });
-          
-          if (res.ok) {
-            console.log("Firebase login successful");
-            const user = await res.json();
-            queryClient.setQueryData(["/api/user"], user);
-            toast({
-              title: "Login successful",
-              description: `Welcome, ${user.displayName || user.username}!`,
-            });
-            return user;
-          } else {
-            // If login fails, user might not exist in our DB yet, so register them
-            console.log("User not found, registering new user");
-            const userData: RegisterData = {
-              username: firebaseUser.email?.split('@')[0] || `user_${Date.now()}`,
-              email: firebaseUser.email || `${Date.now()}@example.com`,
-              password: `firebase_${Date.now()}`, // Will not be used for auth
-              displayName: firebaseUser.displayName || undefined,
-              photoURL: firebaseUser.photoURL || undefined,
+          try {
+            // Try logging in first
+            console.log("Attempting to login with Firebase UID:", firebaseId);
+            const res = await apiRequest("POST", "/api/login-with-firebase", {
               firebaseUid: firebaseId
-            };
-            
-            console.log("Registering Firebase user with data:", userData);
-            // Use our dedicated Firebase registration endpoint instead of the regular registration endpoint
-            const registerResponse = await apiRequest("POST", "/api/register-with-firebase", userData);
-            
-            if (!registerResponse.ok) {
-              const errorData = await registerResponse.json();
-              throw new Error(errorData.message || "Failed to register with Firebase credentials");
-            }
-            
-            const newUser = await registerResponse.json();
-            queryClient.setQueryData(["/api/user"], newUser);
-            
-            toast({
-              title: "Account created",
-              description: "Your account has been created successfully!",
             });
-            return newUser;
+            
+            if (res.ok) {
+              console.log("Firebase login successful");
+              const user = await res.json();
+              queryClient.setQueryData(["/api/user"], user);
+              toast({
+                title: "Login successful",
+                description: `Welcome, ${user.displayName || user.username}!`,
+              });
+              return user;
+            } else {
+              const responseText = await res.text();
+              console.log("Login failed with status:", res.status, "Response:", responseText);
+              
+              // If login fails, user might not exist in our DB yet, so register them
+              console.log("User not found, registering new user with Firebase credentials");
+              
+              // Generate a username that's email prefix + random digits to avoid conflicts
+              const emailPrefix = firebaseUser.email?.split('@')[0] || 'user';
+              const randomSuffix = Math.floor(Math.random() * 10000);
+              const username = `${emailPrefix}_${randomSuffix}`;
+              
+              const userData: RegisterData = {
+                username: username,
+                email: firebaseUser.email || `${username}@example.com`,
+                password: `firebase_${Date.now()}`, // Will not be used for auth
+                displayName: firebaseUser.displayName || username,
+                photoURL: firebaseUser.photoURL || undefined,
+                firebaseUid: firebaseId
+              };
+              
+              console.log("Registering Firebase user with data:", userData);
+              
+              // Use our dedicated Firebase registration endpoint instead of the regular registration endpoint
+              const registerResponse = await apiRequest("POST", "/api/register-with-firebase", userData);
+              
+              if (!registerResponse.ok) {
+                const errorText = await registerResponse.text();
+                console.error("Registration failed:", registerResponse.status, errorText);
+                try {
+                  const errorData = JSON.parse(errorText);
+                  throw new Error(errorData.message || "Failed to register with Firebase credentials");
+                } catch (e) {
+                  throw new Error(`Failed to register: ${errorText}`);
+                }
+              }
+              
+              const newUser = await registerResponse.json();
+              console.log("Registration successful, user created:", newUser);
+              queryClient.setQueryData(["/api/user"], newUser);
+              
+              toast({
+                title: "Account created",
+                description: "Your account has been created successfully!",
+              });
+              return newUser;
+            }
+          } catch (error) {
+            console.error("Error during Firebase authentication flow:", error);
+            throw error;
           }
         } catch (error: any) {
           console.error("Firebase server auth error:", error);
