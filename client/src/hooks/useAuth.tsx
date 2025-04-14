@@ -144,80 +144,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  // Test sign-in function for development (no actual Firebase auth)
+  // Test sign-in function using the dedicated test endpoints
   const testLoginWithFirebase = async () => {
     try {
-      // Create a fake UUID for testing
-      const testFirebaseUid = `firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23`;
-      const testEmail = "test@example.com";
-      const testDisplayName = "Test User";
+      console.log("Starting TEST firebase login with server-side endpoints");
       
-      console.log("Running TEST firebase login with UID:", testFirebaseUid);
+      // First, create a test user with our new endpoint
+      console.log("Step 1: Creating test user");
+      const createRes = await fetch('/api/test/create-firebase-user');
       
-      // First, try logging in with the test Firebase UID
-      try {
-        console.log("Trying to login with Firebase UID first...");
-        const loginRes = await apiRequest("POST", "/api/login-with-firebase", {
-          firebaseUid: testFirebaseUid
-        });
-        
-        if (loginRes.ok) {
-          console.log("Firebase login successful");
-          const user = await loginRes.json();
-          queryClient.setQueryData(["/api/user"], user);
-          toast({
-            title: "Login successful",
-            description: `Welcome, ${user.displayName || user.username}!`,
-          });
-          return user;
-        }
-        
-        console.log("Login failed, will try to register a new user");
-      } catch (loginError) {
-        console.log("Login attempt failed, will register instead:", loginError);
+      if (!createRes.ok) {
+        throw new Error(`Failed to create test user: ${createRes.statusText}`);
       }
       
-      // If login fails, register the user
-      // Generate username from email + random suffix
-      const emailPrefix = testEmail.split('@')[0];
-      const randomSuffix = Math.floor(Math.random() * 10000);
-      const username = `${emailPrefix}_${randomSuffix}`;
+      const createData = await createRes.json();
+      console.log("Server created test user:", createData);
       
-      // Prepare user data
-      const userData: RegisterData = {
-        username,
-        email: testEmail,
-        password: `firebase_${Date.now()}`,
-        displayName: testDisplayName,
-        photoURL: undefined,
-        firebaseUid: testFirebaseUid
-      };
+      // Get the Firebase UID from the response
+      const testFirebaseUid = createData.firebaseUid;
       
-      console.log("Registering new test user with data:", userData);
-      
-      // Register new user directly
-      const registerRes = await apiRequest("POST", "/api/register-with-firebase", userData);
-      
-      if (!registerRes.ok) {
-        const errorText = await registerRes.text();
-        console.error("Registration failed:", registerRes.status, errorText);
-        try {
-          const errorData = JSON.parse(errorText);
-          throw new Error(errorData.message || "Failed to register test user");
-        } catch (e) {
-          throw new Error(`Failed to register: ${errorText}`);
-        }
+      if (!testFirebaseUid) {
+        throw new Error("No Firebase UID returned from server");
       }
       
-      const newUser = await registerRes.json();
-      console.log("Test user registered successfully:", newUser);
-      queryClient.setQueryData(["/api/user"], newUser);
+      // Now log in with that user
+      console.log("Step 2: Logging in with test user");
+      const loginRes = await fetch(`/api/test/login-firebase-user?firebaseUid=${testFirebaseUid}`, {
+        credentials: 'include' // Important: this ensures cookies are sent
+      });
+      
+      if (!loginRes.ok) {
+        throw new Error(`Failed to login test user: ${loginRes.statusText}`);
+      }
+      
+      const loginData = await loginRes.json();
+      console.log("Server logged in test user:", loginData);
+      
+      // Update our local state with the user
+      queryClient.setQueryData(["/api/user"], loginData.user);
       
       toast({
-        title: "Account created",
-        description: "Test account has been created successfully!",
+        title: "Test Login Successful",
+        description: `Logged in as ${loginData.user.username}`,
       });
-      return newUser;
+      
+      // Now the user is logged in
+      return loginData.user;
     } catch (error: any) {
       console.error("Test login failed:", error);
       toast({
