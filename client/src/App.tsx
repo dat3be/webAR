@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { checkRedirectResult } from "@/lib/firebase";
 
+
 // Wrapper components to fix type issues
 const DashboardWrapper = () => <Dashboard />;
 const CreateProjectWrapper = () => <CreateProject />;
@@ -50,6 +51,7 @@ function App() {
         </Route>
       </Switch>
       <Toaster />
+
     </AuthProvider>
   );
 }
