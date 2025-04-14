@@ -124,13 +124,23 @@ export const updateUserProfile = (user: User, data: { displayName?: string; phot
 // Storage functions
 export const uploadFile = async (file: File, path: string) => {
   try {
+    console.log('Starting upload of file:', file.name, 'to path:', path);
+    
+    // Create a reference to the file location in Firebase Storage
     const storageRef = ref(storage, path);
+    
+    // Upload the file to Firebase Storage
     const snapshot = await uploadBytes(storageRef, file);
-    console.log('Uploaded file successfully:', snapshot);
-    return getDownloadURL(storageRef);
-  } catch (error) {
+    console.log('Uploaded file successfully:', snapshot.metadata.name);
+    
+    // Get the download URL
+    const downloadURL = await getDownloadURL(storageRef);
+    console.log('File available at:', downloadURL);
+    
+    return downloadURL;
+  } catch (error: any) {
     console.error('Error uploading file:', error);
-    throw error;
+    throw new Error(`Failed to upload file: ${error?.message || 'Unknown error'}`);
   }
 };
 

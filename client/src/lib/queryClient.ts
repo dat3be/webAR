@@ -2,8 +2,16 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let text;
+    try {
+      // Try to get the response text, but it may have been read already
+      text = await res.text();
+    } catch (e) {
+      // If we can't read the text (e.g. it was already read), use the status text
+      text = res.statusText;
+    }
+    
+    throw new Error(`${res.status}: ${text || 'Unknown error'}`);
   }
 }
 
@@ -12,15 +20,33 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
-
-  await throwIfResNotOk(res);
-  return res;
+  console.log(`API Request: ${method} ${url}`, data);
+  
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: data ? { "Content-Type": "application/json" } : {},
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+    
+    console.log(`API Response status: ${res.status}`);
+    
+    if (!res.ok) {
+      try {
+        const errorText = await res.text();
+        console.error(`API Error ${res.status}: ${errorText}`);
+        throw new Error(`${res.status}: ${errorText || 'Unknown error'}`);
+      } catch (e) {
+        console.error(`Failed to parse error response: ${e}`);
+        throw new Error(`Request failed with status ${res.status}`);
+      }
+    }
+    return res;
+  } catch (error) {
+    console.error(`API Request Error for ${method} ${url}:`, error);
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

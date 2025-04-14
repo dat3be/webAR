@@ -113,6 +113,15 @@ export default function CreateProject() {
       }
 
       // Create project in our backend
+      console.log("Sending project data to backend:", {
+        name,
+        description,
+        type: arType,
+        contentType,
+        modelUrl,
+        targetImageUrl: targetImageUrl || null,
+      });
+      
       const response = await apiRequest("POST", "/api/projects", {
         name,
         description,
@@ -121,6 +130,8 @@ export default function CreateProject() {
         modelUrl,
         targetImageUrl: targetImageUrl || null,
       });
+      
+      console.log("Project created successfully:", response);
 
       toast({
         title: "Success",
