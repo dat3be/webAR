@@ -163,9 +163,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           try {
             // Try logging in first
-            console.log("Attempting to login with Firebase UID:", firebaseId);
+            console.log("Attempting to login with Firebase UID:", firebaseId, "and email:", firebaseUser.email);
             const res = await apiRequest("POST", "/api/login-with-firebase", {
-              firebaseUid: firebaseId
+              firebaseUid: firebaseId,
+              email: firebaseUser.email
             });
             
             if (res.ok) {

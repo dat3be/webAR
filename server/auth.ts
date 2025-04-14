@@ -160,7 +160,7 @@ export function setupAuth(app: Express) {
   app.post("/api/login-with-firebase", async (req, res, next) => {
     try {
       console.log("Firebase login attempt with body:", req.body);
-      const { firebaseUid } = req.body;
+      const { firebaseUid, email } = req.body;
       if (!firebaseUid) {
         console.log("Firebase login failed: Missing Firebase UID");
         return res.status(400).json({ message: "Missing Firebase UID" });
@@ -171,23 +171,29 @@ export function setupAuth(app: Express) {
       // Debug storage methods
       console.log("Storage methods:", Object.keys(storage));
       
-      // Get all users for debugging
-      try {
-        const allUsers = await storage.getUsers();
-        console.log("All users in database:", allUsers?.length || 0);
-        if (allUsers?.length) {
-          console.log("First user:", allUsers[0]);
-          console.log("Users with firebaseUid:", allUsers.filter((u: User) => u.firebaseUid).length);
-          console.log("User with matching UID:", allUsers.find((u: User) => u.firebaseUid === firebaseUid)?.id);
+      // First try to find the user by Firebase UID
+      let user = await storage.getUserByFirebaseUid(firebaseUid);
+      
+      // If no user found with that Firebase UID but email is provided,
+      // check if there's a user with that email and update their Firebase UID
+      if (!user && email) {
+        console.log(`User not found with Firebase UID. Checking if user exists with email: ${email}`);
+        const userByEmail = await storage.getUserByEmail(email);
+        
+        if (userByEmail) {
+          console.log(`Found user with email ${email}. Updating their Firebase UID from ${userByEmail.firebaseUid} to ${firebaseUid}`);
+          
+          // Update the user's Firebase UID
+          user = await storage.updateUserFirebaseUid(userByEmail.id, firebaseUid);
+          console.log("User Firebase UID updated successfully:", user.id, user.username, user.firebaseUid);
+        } else {
+          console.log(`No user found with email: ${email}`);
         }
-      } catch (listError) {
-        console.error("Error listing users:", listError);
       }
       
-      const user = await storage.getUserByFirebaseUid(firebaseUid);
-      
+      // If still no user found, return 404
       if (!user) {
-        console.log("Firebase login failed: User not found with UID:", firebaseUid);
+        console.log("Firebase login failed: User not found with UID:", firebaseUid, "or email:", email);
         return res.status(404).json({ message: "User not found" });
       }
 

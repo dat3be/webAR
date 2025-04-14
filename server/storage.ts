@@ -22,6 +22,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserFirebaseUid(userId: number, firebaseUid: string): Promise<User>; // New method to update Firebase UID
   getProject(id: number): Promise<Project | undefined>;
   getProjects(userId?: number): Promise<Project[]>;
   createProject(project: InsertProject): Promise<Project>;
@@ -81,6 +82,33 @@ export class DatabaseStorage implements IStorage {
 
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
+  }
+  
+  async updateUserFirebaseUid(userId: number, firebaseUid: string): Promise<User> {
+    console.log(`Updating user ${userId} with new Firebase UID: ${firebaseUid}`);
+    
+    // Check if there's already a user with this Firebase UID
+    const existingWithFirebaseUid = await this.getUserByFirebaseUid(firebaseUid);
+    if (existingWithFirebaseUid && existingWithFirebaseUid.id !== userId) {
+      console.log(`Another user already has this Firebase UID: ${existingWithFirebaseUid.id}`);
+      throw new Error(`Another user already has this Firebase UID: ${existingWithFirebaseUid.id}`);
+    }
+    
+    // Update the user
+    const [updatedUser] = await db.update(users)
+      .set({ 
+        firebaseUid: firebaseUid,
+      })
+      .where(eq(users.id, userId))
+      .returning();
+      
+    if (!updatedUser) {
+      console.log(`User with ID ${userId} not found`);
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
+    console.log(`Successfully updated Firebase UID for user ${userId}`);
+    return updatedUser;
   }
 
   async getProject(id: number): Promise<Project | undefined> {
