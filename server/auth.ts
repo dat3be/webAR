@@ -245,11 +245,26 @@ export function setupAuth(app: Express) {
 
   // Logout endpoint
   app.post("/api/logout", (req, res) => {
+    console.log("Logout request received from user:", req.user?.id);
+    
+    // First logout the user from session
     req.logout((err) => {
       if (err) {
+        console.error("Session logout error:", err);
         return res.status(500).json({ message: "Logout failed" });
       }
-      res.json({ message: "Logged out successfully" });
+      
+      // Then destroy the session completely
+      req.session.destroy((err) => {
+        if (err) {
+          console.error("Session destroy error:", err);
+          return res.status(500).json({ message: "Failed to destroy session" });
+        }
+        
+        console.log("User logged out successfully, session destroyed");
+        res.clearCookie("connect.sid"); // Clear the session cookie
+        return res.json({ message: "Logged out successfully" });
+      });
     });
   });
 

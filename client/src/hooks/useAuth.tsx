@@ -95,21 +95,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
-      // Also log out from Firebase if we're using it
-      if (auth.currentUser) {
-        await auth.signOut();
+      console.log("Starting logout process...");
+      // Always sign out of Firebase first (whether we're logged in with it or not)
+      try {
+        if (auth.currentUser) {
+          console.log("Signing out of Firebase...");
+          await auth.signOut();
+          console.log("Firebase sign out successful");
+        }
+      } catch (firebaseError) {
+        console.error("Firebase logout error:", firebaseError);
+        // Continue with server logout even if Firebase logout fails
       }
+      
+      // Then logout from the server
+      console.log("Sending logout request to server...");
+      const response = await apiRequest("POST", "/api/logout");
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Logout failed");
+      }
+      
+      console.log("Server logout successful");
+      return response.json();
     },
     onSuccess: () => {
+      console.log("Logout mutation successful, clearing local data");
+      // Clear user data from query client
       queryClient.setQueryData(["/api/user"], null);
-      // Invalidate all queries
+      
+      // Invalidate all queries to refresh data
       queryClient.invalidateQueries();
+      
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
     },
     onError: (error: Error) => {
+      console.error("Logout error:", error);
       toast({
-        title: "Logout failed",
-        description: error.message,
+        title: "Logout Failed",
+        description: error.message || "There was a problem logging out",
         variant: "destructive",
       });
     },

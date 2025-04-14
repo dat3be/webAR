@@ -13,11 +13,16 @@ import { Bell } from "lucide-react";
 
 export function Header() {
   const [location, navigate] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logoutMutation } = useAuth();
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/");
+    try {
+      await logoutMutation.mutateAsync();
+      console.log("Logout successful");
+      navigate("/auth");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
 
   const handleCreateProject = () => {
