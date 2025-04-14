@@ -30,7 +30,7 @@ let _wasabiClient: S3Client | null = null;
 let _bucketName: string | null = null;
 
 // Hàm để lấy S3 client khi cần
-function getWasabiClient(): S3Client {
+export function getWasabiClient(): S3Client {
   if (!_wasabiClient) {
     console.log("[Wasabi] Creating S3 client with:", {
       region: process.env.WASABI_REGION,
@@ -56,9 +56,10 @@ function getWasabiClient(): S3Client {
 }
 
 // Hàm để lấy tên bucket
-function getBucketName(): string {
+export function getBucketName(): string {
   if (!_bucketName) {
     _bucketName = process.env.WASABI_BUCKET_NAME!;
+    console.log(`[Wasabi] Using bucket: ${_bucketName}`);
   }
   return _bucketName;
 }
@@ -94,21 +95,24 @@ export async function uploadFile(
 
     await upload.done();
     
-    // Tạo URL công khai cho file - thử với các định dạng URL khác nhau của Wasabi
-    let fileUrl = '';
+    // Tạo pre-signed URL để truy cập file (hạn chế trong 1 tuần)
+    const getCommand = new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
     
-    // Định dạng 1: s3.<region>.wasabisys.com/<bucket>/<key>
-    fileUrl = `https://s3.${process.env.WASABI_REGION}.wasabisys.com/${bucket}/${key}`;
+    // Tạo URL với hạn sử dụng 7 ngày
+    const presignedUrl = await getSignedUrl(client, getCommand, { expiresIn: 7 * 24 * 60 * 60 });
+    console.log(`[Wasabi] Created presigned URL (valid for 7 days): ${presignedUrl}`);
     
-    // Định dạng 2: <bucket>.s3.<region>.wasabisys.com/<key>
-    // fileUrl = `https://${bucket}.s3.${process.env.WASABI_REGION}.wasabisys.com/${key}`;
+    // Lưu URL thông thường cho các cách tiếp cận khác nhau (để debug)
+    const stdUrl = `https://s3.${process.env.WASABI_REGION}.wasabisys.com/${bucket}/${key}`;
+    console.log(`[Wasabi] Standard URL (may require authentication): ${stdUrl}`);
     
-    // Định dạng 3: <bucket>.<endpoint>/<key> 
-    // fileUrl = `https://${bucket}.${process.env.WASABI_ENDPOINT}/${key}`;
+    // Trả về URL đã ký
+    console.log(`[Wasabi] File uploaded successfully`);
     
-    console.log(`[Wasabi] File uploaded successfully: ${fileUrl}`);
-    
-    return fileUrl;
+    return presignedUrl;
   } catch (error: any) {
     console.error(`[Wasabi] Error uploading file ${fileName}:`);
     console.error(`[Wasabi] Error type: ${error.name}, code: ${error.$metadata?.httpStatusCode}`);

@@ -5,7 +5,9 @@ import { z } from "zod";
 import { insertProjectSchema, insertUserSchema, updateProjectSchema } from "@shared/schema";
 import { checkDatabaseConnection } from "./db";
 import { setupAuth } from "./auth";
-import { uploadFile } from "./wasabi";
+import { uploadFile, wasabiClient, bucketName } from "./wasabi";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import multer from "multer";
 import * as path from "path";
 
@@ -237,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const upload = multer({
     storage: memoryStorage,
     limits: {
-      fileSize: 50 * 1024 * 1024, // 50MB limit
+      fileSize: 200 * 1024 * 1024, // Tăng giới hạn lên 200MB
     },
     fileFilter: (req, file, cb) => {
       // Define allowed file types
@@ -285,14 +287,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/upload", isAuthenticated, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
+        return res.status(400).json({ message: "Không có tệp nào được tải lên" });
       }
 
       if (!req.user) {
-        return res.status(401).json({ message: "User not authenticated" });
+        return res.status(401).json({ message: "Người dùng chưa xác thực" });
       }
 
-      // Determine folder based on file type
+      // Kiểm tra kích thước tệp
+      if (req.file.size > 200 * 1024 * 1024) {
+        return res.status(413).json({ 
+          message: "Tệp quá lớn", 
+          details: "Kích thước tệp vượt quá giới hạn 200MB"
+        });
+      }
+
+      // Xác định thư mục dựa trên loại tệp
       let folder = 'misc';
       const mimeType = req.file.mimetype;
       
@@ -304,22 +314,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         folder = 'images';
       }
 
-      // Add user ID to folder path for organization
+      // Thêm ID người dùng vào đường dẫn thư mục để tổ chức
       folder = `${folder}/${req.user.id}`;
       
-      console.log(`[API:Upload] Uploading file to Wasabi: ${req.file.originalname} (${mimeType}) to folder: ${folder}`);
-      console.log(`[API:Upload] File size: ${req.file.size} bytes, Buffer length: ${req.file.buffer.length}`);
+      console.log(`[API:Upload] Đang tải tệp lên Wasabi: ${req.file.originalname} (${mimeType}) đến thư mục: ${folder}`);
+      console.log(`[API:Upload] Kích thước tệp: ${req.file.size} bytes, Độ dài Buffer: ${req.file.buffer.length}`);
       
       try {
-        // Upload to Wasabi
-        const fileUrl = await uploadFile(
-          req.file.buffer,
-          req.file.originalname,
-          req.file.mimetype,
-          folder
-        );
+        // Tải lên Wasabi với nhiều lần thử lại
+        let fileUrl = null;
+        let uploadError = null;
         
-        console.log(`[API:Upload] Upload successful, returning URL: ${fileUrl}`);
+        // Thử tối đa 3 lần
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            console.log(`[API:Upload] Đang thử tải lên lần ${attempt}/3`);
+            fileUrl = await uploadFile(
+              req.file.buffer,
+              req.file.originalname,
+              req.file.mimetype,
+              folder
+            );
+            // Nếu thành công, thoát khỏi vòng lặp
+            break;
+          } catch (err: any) {
+            console.error(`[API:Upload] Lỗi lần thử ${attempt}:`, err);
+            uploadError = err;
+            // Chờ 1 giây trước khi thử lại
+            if (attempt < 3) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }
+        
+        // Nếu tất cả các lần thử đều thất bại
+        if (!fileUrl) {
+          throw uploadError || new Error("Không thể tải tệp lên sau nhiều lần thử");
+        }
+        
+        console.log(`[API:Upload] Tải lên thành công, trả về URL: ${fileUrl}`);
         
         res.status(200).json({ 
           url: fileUrl,
@@ -328,7 +361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           size: req.file.size
         });
       } catch (error: any) {
-        console.error("[API:Upload] Wasabi upload error:", error);
+        console.error("[API:Upload] Lỗi khi tải lên Wasabi:", error);
         if (error.message && error.message.includes("403")) {
           return res.status(403).json({ 
             message: "403 Forbidden: không thể gửi đến Wasabi", 
@@ -336,10 +369,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
             details: "Lỗi quyền truy cập Wasabi. Vui lòng kiểm tra cấu hình và quyền bucket."
           });
         }
-        throw error;  // Re-throw for general error handling
+        throw error;  // Ném lại lỗi để xử lý lỗi chung
       }
     } catch (error) {
-      console.error("[API:Upload] General error:", error);
+      console.error("[API:Upload] Lỗi chung:", error);
+      handleApiError(error, res);
+    }
+  });
+  
+  // Endpoint để tạo direct URL cho file đã tồn tại
+  app.get("/api/file-access/:fileKey", isAuthenticated, async (req, res) => {
+    try {
+      const fileKey = req.params.fileKey;
+      
+      if (!fileKey) {
+        return res.status(400).json({ message: "Không có khóa tệp được cung cấp" });
+      }
+      
+      console.log(`[API:FileAccess] Tạo URL công khai cho khóa: ${fileKey}`);
+      
+      try {
+        const bucket = bucketName();
+        
+        // Tạo URL công khai theo các định dạng Wasabi khác nhau
+        // Định dạng 1: https://s3.<region>.wasabisys.com/<bucket>/<key>
+        const publicUrl = `https://s3.${process.env.WASABI_REGION}.wasabisys.com/${bucket}/${fileKey}`;
+        
+        // Định dạng 2: https://<bucket>.s3.<region>.wasabisys.com/<key>
+        const altUrl = `https://${bucket}.s3.${process.env.WASABI_REGION}.wasabisys.com/${fileKey}`;
+        
+        // Định dạng 3: https://<bucket>.<endpoint>/<key>
+        const altUrl2 = `https://${bucket}.${process.env.WASABI_ENDPOINT}/${fileKey}`;
+        
+        console.log(`[API:FileAccess] URL công khai đã tạo: ${publicUrl}`);
+        
+        res.status(200).json({ 
+          url: publicUrl,
+          altUrl: altUrl,
+          altUrl2: altUrl2,
+          key: fileKey,
+          bucket: bucket
+        });
+      } catch (error: any) {
+        console.error("[API:FileAccess] Lỗi khi tạo URL công khai:", error);
+        return res.status(500).json({ 
+          message: "Lỗi khi tạo URL công khai", 
+          error: error.message,
+          details: "Kiểm tra cấu hình bucket và quyền truy cập"
+        });
+      }
+    } catch (error) {
+      console.error("[API:FileAccess] Lỗi chung:", error);
       handleApiError(error, res);
     }
   });
