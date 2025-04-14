@@ -1,13 +1,13 @@
 import { Switch, Route } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/login";
-import Signup from "@/pages/signup";
+import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
 import CreateProject from "@/pages/create-project";
 import ViewProject from "@/pages/view-project";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useEffect } from "react";
+import { ProtectedRoute } from "@/lib/protected-route";
 
 function App() {
   // Set document title
@@ -18,10 +18,10 @@ function App() {
   return (
     <AuthProvider>
       <Switch>
-        <Route path="/" component={Login} />
-        <Route path="/signup" component={Signup} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/create-project" component={CreateProject} />
+        <ProtectedRoute path="/" component={Dashboard} />
+        <Route path="/auth" component={AuthPage} />
+        <ProtectedRoute path="/dashboard" component={Dashboard} />
+        <ProtectedRoute path="/create-project" component={CreateProject} />
         <Route path="/view/:projectId" component={ViewProject} />
         <Route component={NotFound} />
       </Switch>
