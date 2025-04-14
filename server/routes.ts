@@ -5,7 +5,7 @@ import { z } from "zod";
 import { insertProjectSchema, insertUserSchema, updateProjectSchema } from "@shared/schema";
 import { checkDatabaseConnection } from "./db";
 import { setupAuth } from "./auth";
-import { uploadFile, wasabiClient, bucketName } from "./wasabi";
+import { uploadFile, wasabiClient, bucketName, createPresignedPost, getPublicUrl } from "./wasabi";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import multer from "multer";
@@ -283,7 +283,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // File upload endpoint
+  // Endpoint để tạo presigned URL cho upload trực tiếp
+  app.post("/api/presigned-upload", isAuthenticated, async (req, res) => {
+    try {
+      const { fileName, contentType, folder } = req.body;
+      
+      if (!fileName || !contentType) {
+        return res.status(400).json({ 
+          message: "Thiếu thông tin", 
+          details: "Cần cung cấp fileName và contentType" 
+        });
+      }
+      
+      // Xác định thư mục dựa trên loại tệp
+      let targetFolder = folder || 'misc';
+      if (!folder) {
+        if (contentType.startsWith('model/')) {
+          targetFolder = 'models';
+        } else if (contentType.startsWith('video/')) {
+          targetFolder = 'videos';
+        } else if (contentType.startsWith('image/')) {
+          targetFolder = 'images';
+        }
+        
+        // Thêm ID người dùng vào đường dẫn thư mục để tổ chức
+        if (req.user?.id) {
+          targetFolder = `${targetFolder}/${req.user.id}`;
+        }
+      }
+      
+      console.log(`[API:PresignedUpload] Tạo presigned URL cho: ${fileName} (${contentType}) đến thư mục: ${targetFolder}`);
+      
+      // Tạo presigned URL
+      const presignedData = await createPresignedPost(fileName, contentType, targetFolder);
+      
+      // Lấy URL công khai cho tệp - để sử dụng sau khi tải lên
+      const publicUrls = getPublicUrl(presignedData.key);
+      
+      res.status(200).json({
+        ...presignedData,
+        publicUrls
+      });
+    } catch (error) {
+      console.error("[API:PresignedUpload] Lỗi:", error);
+      handleApiError(error, res);
+    }
+  });
+  
+  // File upload endpoint (giữ lại cho tương thích ngược)
   app.post("/api/upload", isAuthenticated, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {

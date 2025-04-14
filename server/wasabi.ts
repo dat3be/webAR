@@ -64,6 +64,27 @@ export function getBucketName(): string {
   return _bucketName;
 }
 
+// Hàm tạo URL công khai từ thông tin tệp
+function generatePublicUrl(bucketName: string, key: string): {
+  url: string,
+  altUrl: string,
+  altUrl2: string,
+} {
+  const region = process.env.WASABI_REGION!;
+  const endpoint = process.env.WASABI_ENDPOINT!;
+  
+  // Format 1: https://s3.<region>.wasabisys.com/<bucket>/<key>
+  const url = `https://s3.${region}.wasabisys.com/${bucketName}/${key}`;
+  
+  // Format 2: https://<bucket>.s3.<region>.wasabisys.com/<key>
+  const altUrl = `https://${bucketName}.s3.${region}.wasabisys.com/${key}`;
+  
+  // Format 3: https://<bucket>.<endpoint>/<key>
+  const altUrl2 = `https://${bucketName}.${endpoint}/${key}`;
+  
+  return { url, altUrl, altUrl2 };
+}
+
 // Hàm tải file lên Wasabi
 export async function uploadFile(
   fileBuffer: Buffer,
@@ -73,14 +94,25 @@ export async function uploadFile(
 ): Promise<string> {
   const client = getWasabiClient();
   const bucket = getBucketName();
-  const key = `${folder}/${Date.now()}-${fileName}`;
+  // Tạo key với encoding tên file để tránh các ký tự đặc biệt
+  const safeFileName = encodeURIComponent(fileName.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  // Tạo timestamp chính xác đến millisecond để đảm bảo tên file là duy nhất
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const key = `${folder}/${timestamp}-${safeFileName}`;
   
   try {
     console.log(`[Wasabi] Uploading file ${fileName} to ${key} (size: ${fileBuffer.length} bytes)`);
     console.log(`[Wasabi] Bucket: ${bucket}, ContentType: ${contentType}`);
     
-    // Kiểm tra credentials
+    // Kiểm tra credentials (chỉ log 3 ký tự đầu tiên của key để bảo mật)
     console.log(`[Wasabi] Using access key ID: ${process.env.WASABI_ACCESS_KEY_ID?.substring(0, 3)}...`);
+    
+    // Thêm metadata để theo dõi
+    const metadata = {
+      'x-amz-meta-uploaded-at': new Date().toISOString(),
+      'x-amz-meta-content-type': contentType,
+      'x-amz-meta-original-name': fileName,
+    };
     
     const upload = new Upload({
       client: client,
@@ -90,36 +122,39 @@ export async function uploadFile(
         Body: fileBuffer,
         ContentType: contentType,
         ACL: 'public-read', // Cho phép đọc công khai, quan trọng để file có thể truy cập từ web
+        Metadata: metadata,
+        // Đảm bảo không có caching cho tệp
+        CacheControl: 'no-cache, no-store, must-revalidate',
       },
     });
 
     await upload.done();
+    console.log(`[Wasabi] Upload completed successfully for key: ${key}`);
     
-    // Tạo pre-signed URL để truy cập file (hạn chế trong 1 tuần)
-    const getCommand = new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    });
+    // Tạo URL công khai theo các định dạng khác nhau
+    const { url, altUrl, altUrl2 } = generatePublicUrl(bucket, key);
     
-    // Tạo URL với hạn sử dụng 7 ngày
-    const presignedUrl = await getSignedUrl(client, getCommand, { expiresIn: 7 * 24 * 60 * 60 });
-    console.log(`[Wasabi] Created presigned URL (valid for 7 days): ${presignedUrl}`);
+    console.log(`[Wasabi] Public URL: ${url}`);
+    console.log(`[Wasabi] Alternative URLs: ${altUrl}, ${altUrl2}`);
     
-    // Lưu URL thông thường cho các cách tiếp cận khác nhau (để debug)
-    const stdUrl = `https://s3.${process.env.WASABI_REGION}.wasabisys.com/${bucket}/${key}`;
-    console.log(`[Wasabi] Standard URL (may require authentication): ${stdUrl}`);
-    
-    // Trả về URL đã ký
-    console.log(`[Wasabi] File uploaded successfully`);
-    
-    return presignedUrl;
+    // Trả về URL công khai thay vì presigned URL
+    return url;
   } catch (error: any) {
     console.error(`[Wasabi] Error uploading file ${fileName}:`);
     console.error(`[Wasabi] Error type: ${error.name}, code: ${error.$metadata?.httpStatusCode}`);
     console.error(`[Wasabi] Error message: ${error.message}`);
+    console.error(`[Wasabi] Error details:`, error);
     
     if (error.$metadata?.httpStatusCode === 403) {
       throw new Error(`403 Forbidden: Không có quyền truy cập bucket. Kiểm tra cấu hình IAM và quyền bucket.`);
+    }
+    
+    if (error.name === 'TimeoutError' || error.message?.includes('timeout')) {
+      throw new Error(`Timeout: Tải lên tệp quá lâu. Kiểm tra kết nối mạng hoặc giảm kích thước tệp.`);
+    }
+    
+    if (error.name === 'EntityTooLarge' || error.$metadata?.httpStatusCode === 413) {
+      throw new Error(`413 Payload Too Large: Tệp quá lớn. Giới hạn là 200MB.`);
     }
     
     throw new Error(`Failed to upload file to Wasabi: ${error.message}`);
@@ -193,6 +228,61 @@ export function getKeyFromUrl(url: string): string {
     return parts.slice(2).join('/');
   }
   return path.substring(1); // Trường hợp không đúng định dạng, trả về toàn bộ đường dẫn
+}
+
+// Tạo pre-signed URL cho việc upload trực tiếp từ client
+export async function createPresignedPost(fileName: string, contentType: string, folder: string = 'uploads'): Promise<{
+  url: string;
+  fields: Record<string, string>;
+  key: string;
+}> {
+  const client = getWasabiClient();
+  const bucket = getBucketName();
+  // Tạo key với encoding tên file để tránh các ký tự đặc biệt
+  const safeFileName = encodeURIComponent(fileName.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  // Tạo timestamp chính xác đến millisecond để đảm bảo tên file là duy nhất
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const key = `${folder}/${timestamp}-${safeFileName}`;
+  
+  console.log(`[Wasabi] Creating presigned post for ${fileName} (${contentType}), key: ${key}`);
+  
+  try {
+    // Tạo pre-signed URL cho PUT operation
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: contentType,
+      ACL: 'public-read',
+    });
+    
+    const signedUrl = await getSignedUrl(client, command, { 
+      expiresIn: 15 * 60 // 15 phút
+    });
+    
+    console.log(`[Wasabi] Created presigned URL for direct upload: ${signedUrl}`);
+    
+    return {
+      url: signedUrl,
+      fields: {
+        'Content-Type': contentType,
+        'ACL': 'public-read',
+      },
+      key
+    };
+  } catch (error) {
+    console.error(`[Wasabi] Error creating presigned post:`, error);
+    throw new Error(`Không thể tạo URL cho tải lên: ${(error as Error).message}`);
+  }
+}
+
+// Lấy công khai URL của một tệp dựa trên key
+export function getPublicUrl(key: string): {
+  url: string;
+  altUrl: string;
+  altUrl2: string;
+} {
+  const bucket = getBucketName();
+  return generatePublicUrl(bucket, key);
 }
 
 // Xuất một phiên bản tương thích cho mã cũ sử dụng các biến trực tiếp
