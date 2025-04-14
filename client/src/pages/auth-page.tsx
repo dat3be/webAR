@@ -95,17 +95,9 @@ export default function AuthPage() {
   const handleGoogleSignIn = async () => {
     try {
       await loginWithGoogle();
-      toast({
-        title: "Login successful",
-        description: "Welcome!",
-      });
       navigate("/dashboard");
     } catch (error) {
-      toast({
-        title: "Google login failed",
-        description: "Please try again.",
-        variant: "destructive",
-      });
+      // Error handling is done in useAuth hook via toast notifications
     }
   };
 

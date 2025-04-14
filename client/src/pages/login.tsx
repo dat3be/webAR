@@ -17,7 +17,7 @@ export default function Login() {
   const { user, loginMutation, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  // Use mutation state for loading indicator
   const [showEmailAuth, setShowEmailAuth] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -39,7 +39,6 @@ export default function Login() {
       return;
     }
 
-    setIsLoading(true);
     setAuthError(null);
     
     try {
@@ -52,24 +51,15 @@ export default function Login() {
       console.error("Login error:", error);
       
       let errorMessage = "Failed to login. Please try again.";
-      if (error.code === "auth/operation-not-allowed") {
-        errorMessage = "Email/password sign-in is not enabled. Please use Google sign-in instead.";
-      } else if (error.code === "auth/user-not-found") {
-        errorMessage = "No account found with this email address.";
-      } else if (error.code === "auth/wrong-password") {
-        errorMessage = "Incorrect password. Please try again.";
-      } else if (error.message) {
+      if (error.message) {
         errorMessage = error.message;
       }
       
       setAuthError(errorMessage);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-    setIsLoading(true);
     setAuthError(null);
     
     try {
@@ -86,8 +76,6 @@ export default function Login() {
       }
       
       setAuthError(errorMessage);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -118,7 +106,7 @@ export default function Login() {
             type="button" 
             className="w-full h-12 text-base" 
             onClick={handleGoogleLogin} 
-            disabled={isLoading}
+            disabled={loginMutation.isPending}
           >
             <FcGoogle className="mr-2 h-6 w-6" />
             Sign in with Google
@@ -176,8 +164,8 @@ export default function Login() {
                   Remember me
                 </Label>
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign in with Email"}
+              <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+                {loginMutation.isPending ? "Signing in..." : "Sign in with Email"}
               </Button>
             </form>
           )}
