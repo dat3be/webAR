@@ -17,6 +17,7 @@ import { pool } from "./db";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
+  getUsers(): Promise<User[]>; // Added this method to get all users
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined>;
@@ -50,6 +51,10 @@ export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
+  }
+  
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {

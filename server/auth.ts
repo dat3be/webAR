@@ -166,7 +166,25 @@ export function setupAuth(app: Express) {
       }
 
       console.log("Looking up user with Firebase UID:", firebaseUid);
+      
+      // Debug storage methods
+      console.log("Storage methods:", Object.keys(storage));
+      
+      // Get all users for debugging
+      try {
+        const allUsers = await storage.getUsers();
+        console.log("All users in database:", allUsers?.length || 0);
+        if (allUsers?.length) {
+          console.log("First user:", allUsers[0]);
+          console.log("Users with firebaseUid:", allUsers.filter((u: User) => u.firebaseUid).length);
+          console.log("User with matching UID:", allUsers.find((u: User) => u.firebaseUid === firebaseUid)?.id);
+        }
+      } catch (listError) {
+        console.error("Error listing users:", listError);
+      }
+      
       const user = await storage.getUserByFirebaseUid(firebaseUid);
+      
       if (!user) {
         console.log("Firebase login failed: User not found with UID:", firebaseUid);
         return res.status(404).json({ message: "User not found" });
