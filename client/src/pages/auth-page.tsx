@@ -38,7 +38,7 @@ export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<"login" | "register">(initialTab);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toast } = useToast();
-  const { user, loginMutation, registerMutation, loginWithGoogle } = useAuth();
+  const { user, loginMutation, registerMutation, loginWithGoogle, testLoginWithFirebase } = useAuth();
 
   // Create forms
   const loginForm = useForm<LoginFormValues>({

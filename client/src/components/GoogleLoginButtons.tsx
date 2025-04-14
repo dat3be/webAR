@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 interface GoogleLoginButtonsProps {
   isGoogleLoading: boolean;
@@ -15,6 +15,7 @@ export function GoogleLoginButtons({
   loginWithGoogle
 }: GoogleLoginButtonsProps) {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
 
   // Handle Google sign-in
   const handleGoogleSignIn = async () => {

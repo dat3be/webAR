@@ -18,6 +18,7 @@ type AuthContextType = {
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<UserType, Error, RegisterData>;
   loginWithGoogle: () => Promise<any>;
+  testLoginWithFirebase: () => Promise<any>;
 };
 
 type LoginData = {
@@ -142,6 +143,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+
+  // Test sign-in function for development (no actual Firebase auth)
+  const testLoginWithFirebase = async () => {
+    try {
+      // Create a fake UUID for testing
+      const testFirebaseUid = `firebase-Wp9YXNspKfPMAFWlqhZ4duggDT23`;
+      const testEmail = "test@example.com";
+      const testDisplayName = "Test User";
+      
+      console.log("Running TEST firebase login with UID:", testFirebaseUid);
+      
+      // First, try logging in with the test Firebase UID
+      try {
+        console.log("Trying to login with Firebase UID first...");
+        const loginRes = await apiRequest("POST", "/api/login-with-firebase", {
+          firebaseUid: testFirebaseUid
+        });
+        
+        if (loginRes.ok) {
+          console.log("Firebase login successful");
+          const user = await loginRes.json();
+          queryClient.setQueryData(["/api/user"], user);
+          toast({
+            title: "Login successful",
+            description: `Welcome, ${user.displayName || user.username}!`,
+          });
+          return user;
+        }
+        
+        console.log("Login failed, will try to register a new user");
+      } catch (loginError) {
+        console.log("Login attempt failed, will register instead:", loginError);
+      }
+      
+      // If login fails, register the user
+      // Generate username from email + random suffix
+      const emailPrefix = testEmail.split('@')[0];
+      const randomSuffix = Math.floor(Math.random() * 10000);
+      const username = `${emailPrefix}_${randomSuffix}`;
+      
+      // Prepare user data
+      const userData: RegisterData = {
+        username,
+        email: testEmail,
+        password: `firebase_${Date.now()}`,
+        displayName: testDisplayName,
+        photoURL: undefined,
+        firebaseUid: testFirebaseUid
+      };
+      
+      console.log("Registering new test user with data:", userData);
+      
+      // Register new user directly
+      const registerRes = await apiRequest("POST", "/api/register-with-firebase", userData);
+      
+      if (!registerRes.ok) {
+        const errorText = await registerRes.text();
+        console.error("Registration failed:", registerRes.status, errorText);
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.message || "Failed to register test user");
+        } catch (e) {
+          throw new Error(`Failed to register: ${errorText}`);
+        }
+      }
+      
+      const newUser = await registerRes.json();
+      console.log("Test user registered successfully:", newUser);
+      queryClient.setQueryData(["/api/user"], newUser);
+      
+      toast({
+        title: "Account created",
+        description: "Test account has been created successfully!",
+      });
+      return newUser;
+    } catch (error: any) {
+      console.error("Test login failed:", error);
+      toast({
+        title: "Test Login Failed",
+        description: error.message || "Error during test login",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
 
   // Google sign-in function
   const loginWithGoogle = async () => {
@@ -270,7 +356,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
-        loginWithGoogle
+        loginWithGoogle,
+        testLoginWithFirebase
       }}
     >
       {children}
