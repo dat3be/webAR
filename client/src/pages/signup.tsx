@@ -14,7 +14,7 @@ import { AlertCircle } from "lucide-react";
 export default function Signup() {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
-  const { user, signup, loginWithGoogle } = useAuth();
+  const { user, registerMutation, loginWithGoogle } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

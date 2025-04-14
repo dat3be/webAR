@@ -14,7 +14,7 @@ import { AlertCircle, Info } from "lucide-react";
 export default function Login() {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
-  const { user, login, loginWithGoogle } = useAuth();
+  const { user, loginMutation, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +43,10 @@ export default function Login() {
     setAuthError(null);
     
     try {
-      await login(email, password);
+      await loginMutation.mutateAsync({
+        username: email,
+        password: password
+      });
       navigate("/dashboard");
     } catch (error: any) {
       console.error("Login error:", error);
