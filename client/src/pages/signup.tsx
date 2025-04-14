@@ -14,12 +14,12 @@ import { AlertCircle } from "lucide-react";
 export default function Signup() {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
-  const { user, registerMutation, loginWithGoogle } = useAuth();
+  const { user, loading, registerMutation, loginWithGoogle } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  // Use mutation state for loading indicator
   const [showEmailAuth, setShowEmailAuth] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -50,7 +50,6 @@ export default function Signup() {
       return;
     }
 
-    setIsLoading(true);
     setAuthError(null);
     
     try {
@@ -68,24 +67,15 @@ export default function Signup() {
       console.error("Signup error:", error);
       
       let errorMessage = "Failed to create account. Please try again.";
-      if (error.code === "auth/operation-not-allowed") {
-        errorMessage = "Email/password sign-up is not enabled. Please use Google sign-in instead.";
-      } else if (error.code === "auth/email-already-in-use") {
-        errorMessage = "An account with this email already exists.";
-      } else if (error.code === "auth/weak-password") {
-        errorMessage = "Password is too weak. Please use a stronger password.";
-      } else if (error.message) {
+      if (error.message) {
         errorMessage = error.message;
       }
       
       setAuthError(errorMessage);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleGoogleSignup = async () => {
-    setIsLoading(true);
     setAuthError(null);
     
     try {
@@ -119,8 +109,6 @@ export default function Signup() {
       }
       
       setAuthError(errorMessage);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -151,7 +139,7 @@ export default function Signup() {
             type="button" 
             className="w-full h-12 text-base" 
             onClick={handleGoogleSignup} 
-            disabled={isLoading}
+            disabled={registerMutation.isPending}
           >
             <FcGoogle className="mr-2 h-6 w-6" />
             Sign up with Google
