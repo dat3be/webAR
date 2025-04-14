@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, X, RotateCcw } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 // Define the interface for mindar and THREE to avoid typescript errors
 declare global {
@@ -42,9 +43,17 @@ export default function ViewProject() {
 
   useEffect(() => {
     if (!isProjectLoading && project) {
+      // Track this view in analytics
+      try {
+        apiRequest("POST", `/api/projects/${projectId}/view`);
+      } catch (error) {
+        console.error("Failed to record view:", error);
+        // Non-critical error, continue loading the experience
+      }
+      
       loadARExperience();
     }
-  }, [isProjectLoading, project]);
+  }, [isProjectLoading, project, projectId]);
 
   const loadScripts = async () => {
     if (project?.type === "image-tracking") {

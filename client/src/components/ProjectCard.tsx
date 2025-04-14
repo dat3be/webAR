@@ -1,10 +1,14 @@
 import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Project } from "@shared/schema";
-import { Eye, Share2, Trash } from "lucide-react";
+import { Project, ProjectAnalytics } from "@shared/schema";
+import { Eye, Share2, Trash, BarChart2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ProjectCardProps {
   project: Project;
@@ -13,26 +17,55 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project, onDelete }: ProjectCardProps) {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const [showAnalytics, setShowAnalytics] = useState(false);
+
+  // Fetch analytics data if needed
+  const { data: analytics, isLoading: isLoadingAnalytics } = useQuery({
+    queryKey: [`/api/projects/${project.id}/analytics`],
+    enabled: showAnalytics,
+  });
 
   const handlePreview = () => {
     navigate(`/view/${project.id}`);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const shareUrl = window.location.origin + `/view/${project.id}`;
     
-    // Check if Web Share API is available
-    if (navigator.share) {
-      navigator.share({
-        title: project.name,
-        text: 'Check out my AR project: ' + project.name,
-        url: shareUrl,
+    try {
+      // Record share analytics
+      await apiRequest("POST", `/api/projects/${project.id}/share`);
+      
+      // Check if Web Share API is available
+      if (navigator.share) {
+        navigator.share({
+          title: project.name,
+          text: 'Check out my AR project: ' + project.name,
+          url: shareUrl,
+        });
+      } else {
+        // Fallback to copying to clipboard
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          title: "Link Copied",
+          description: "Project link copied to clipboard",
+        });
+      }
+    } catch (error) {
+      console.error("Error sharing project:", error);
+      // Still copy the link even if analytics fails
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "Link Copied",
+        description: "Project link copied to clipboard",
       });
-    } else {
-      // Fallback to copying to clipboard
-      navigator.clipboard.writeText(shareUrl);
-      alert('Link copied to clipboard!');
     }
+  };
+
+  // Toggle analytics view
+  const toggleAnalytics = () => {
+    setShowAnalytics(!showAnalytics);
   };
 
   // Format creation date
@@ -64,10 +97,43 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
               {project.contentType === "video" && " (Video)"}
             </p>
           </div>
-          <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">
-            Active
+          <Badge 
+            variant={project.status === "active" ? "outline" : "destructive"} 
+            className={project.status === "active" ? "bg-green-100 text-green-800 hover:bg-green-100" : ""}
+          >
+            {project.status === "active" ? "Active" : project.status === "archived" ? "Archived" : "Deleted"}
           </Badge>
         </div>
+        
+        {/* Analytics section (conditionally rendered) */}
+        {showAnalytics && (
+          <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-200">
+            <h4 className="text-sm font-medium mb-2">Analytics</h4>
+            {isLoadingAnalytics ? (
+              <p className="text-sm text-gray-500">Loading analytics...</p>
+            ) : analytics ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-gray-500">Views</p>
+                  <p className="text-sm font-medium">{analytics.viewCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Shares</p>
+                  <p className="text-sm font-medium">{analytics.shareCount}</p>
+                </div>
+                {analytics.lastViewed && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Last viewed</p>
+                    <p className="text-sm">{formatDistanceToNow(new Date(analytics.lastViewed), { addSuffix: true })}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No analytics available</p>
+            )}
+          </div>
+        )}
+        
         <div className="mt-4 flex">
           <span className="text-sm text-gray-500">Created: {createdDate}</span>
         </div>
@@ -81,6 +147,10 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2 className="mr-1.5 h-4 w-4 text-gray-400" />
             Share
+          </Button>
+          <Button variant="outline" size="sm" onClick={toggleAnalytics}>
+            <BarChart2 className="mr-1.5 h-4 w-4 text-gray-400" />
+            Stats
           </Button>
         </div>
         <Button variant="destructive" size="sm" onClick={onDelete}>
