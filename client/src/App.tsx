@@ -9,6 +9,10 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import { ProtectedRoute } from "@/lib/protected-route";
 
+// Wrapper components to fix type issues
+const DashboardWrapper = () => <Dashboard />;
+const CreateProjectWrapper = () => <CreateProject />;
+
 function App() {
   // Set document title
   useEffect(() => {
@@ -18,12 +22,18 @@ function App() {
   return (
     <AuthProvider>
       <Switch>
-        <ProtectedRoute path="/" component={Dashboard} />
-        <Route path="/auth" component={AuthPage} />
-        <ProtectedRoute path="/dashboard" component={Dashboard} />
-        <ProtectedRoute path="/create-project" component={CreateProject} />
-        <Route path="/view/:projectId" component={ViewProject} />
-        <Route component={NotFound} />
+        <ProtectedRoute path="/" component={DashboardWrapper} />
+        <Route path="/auth">
+          <AuthPage />
+        </Route>
+        <ProtectedRoute path="/dashboard" component={DashboardWrapper} />
+        <ProtectedRoute path="/create-project" component={CreateProjectWrapper} />
+        <Route path="/view/:projectId">
+          {(params) => <ViewProject projectId={params.projectId} />}
+        </Route>
+        <Route>
+          <NotFound />
+        </Route>
       </Switch>
       <Toaster />
     </AuthProvider>

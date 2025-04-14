@@ -54,13 +54,13 @@ export default function Signup() {
     setAuthError(null);
     
     try {
-      const userCredential = await signup(email, password, name);
-      // Create user in our backend too
-      await apiRequest("POST", "/api/users", {
+      // Register user directly with our backend
+      await registerMutation.mutateAsync({
         username: name.toLowerCase().replace(/\s+/g, ''),
         email: email,
+        password: password,
         displayName: name,
-        firebaseUid: userCredential.user.uid,
+        firebaseUid: 'manual-' + Date.now(), // Manual user signup
       });
       
       navigate("/dashboard");
@@ -94,9 +94,10 @@ export default function Signup() {
       
       // Create user in our backend too
       try {
-        await apiRequest("POST", "/api/users", {
+        await registerMutation.mutateAsync({
           username: user.email?.split('@')[0] || user.uid,
-          email: user.email,
+          email: user.email || `${user.uid}@example.com`,
+          password: `firebase_${Date.now()}`, // Will not be used for auth
           displayName: user.displayName || user.email?.split('@')[0],
           photoURL: user.photoURL,
           firebaseUid: user.uid,

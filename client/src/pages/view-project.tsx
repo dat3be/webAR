@@ -16,7 +16,11 @@ declare global {
   }
 }
 
-export default function ViewProject() {
+interface ViewProjectProps {
+  projectId?: string;
+}
+
+export default function ViewProject({ projectId }: ViewProjectProps) {
   const [, navigate] = useLocation();
   const [match, params] = useRoute<{ projectId: string }>("/view/:projectId");
   const { toast } = useToast();
@@ -25,10 +29,10 @@ export default function ViewProject() {
   const [status, setStatus] = useState("Loading AR experience...");
 
   // Fetch project data
-  const projectId = params?.projectId;
+  const projectIdToUse = projectId || params?.projectId;
   const { data: project, isLoading: isProjectLoading, error } = useQuery<Project>({
-    queryKey: [`/api/projects/${projectId}`],
-    enabled: !!projectId,
+    queryKey: [`/api/projects/${projectIdToUse}`],
+    enabled: !!projectIdToUse,
   });
 
   useEffect(() => {
@@ -46,7 +50,7 @@ export default function ViewProject() {
     if (!isProjectLoading && project) {
       // Track this view in analytics
       try {
-        apiRequest("POST", `/api/projects/${projectId}/view`);
+        apiRequest("POST", `/api/projects/${projectIdToUse}/view`);
       } catch (error) {
         console.error("Failed to record view:", error);
         // Non-critical error, continue loading the experience
@@ -54,7 +58,7 @@ export default function ViewProject() {
       
       loadARExperience();
     }
-  }, [isProjectLoading, project, projectId]);
+  }, [isProjectLoading, project, projectIdToUse]);
 
   const loadScripts = async () => {
     if (project?.type === "image-tracking") {
