@@ -61,8 +61,8 @@ export function setupAuth(app: Express) {
           }
           
           // Skip password check for Firebase users
-          if (user.firebaseUid.startsWith('firebase-')) {
-            return done(null, false, { message: "Please use Google login" });
+          if (user.firebaseUid && user.firebaseUid.startsWith('firebase-')) {
+            return done(null, false, { message: "Please use Google login for this account" });
           }
           
           const passwordValid = await comparePasswords(password, user.password);
@@ -116,8 +116,11 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "Email already in use" });
       }
 
-      // Hash password for new users
-      if (!req.body.firebaseUid.startsWith('firebase-')) {
+      // Hash password for new users (only for non-Firebase users)
+      if (req.body.firebaseUid && !req.body.firebaseUid.startsWith('firebase-')) {
+        req.body.password = await hashPassword(req.body.password);
+      } else if (!req.body.firebaseUid) {
+        // If no firebase UID is provided, this is a regular user
         req.body.password = await hashPassword(req.body.password);
       }
 
@@ -155,23 +158,33 @@ export function setupAuth(app: Express) {
   // Firebase login endpoint
   app.post("/api/login-with-firebase", async (req, res, next) => {
     try {
+      console.log("Firebase login attempt with body:", req.body);
       const { firebaseUid } = req.body;
       if (!firebaseUid) {
+        console.log("Firebase login failed: Missing Firebase UID");
         return res.status(400).json({ message: "Missing Firebase UID" });
       }
 
+      console.log("Looking up user with Firebase UID:", firebaseUid);
       const user = await storage.getUserByFirebaseUid(firebaseUid);
       if (!user) {
+        console.log("Firebase login failed: User not found with UID:", firebaseUid);
         return res.status(404).json({ message: "User not found" });
       }
 
+      console.log("Firebase user found:", user.id, user.username);
       req.login(user, (err) => {
-        if (err) return next(err);
+        if (err) {
+          console.log("Firebase login session error:", err);
+          return next(err);
+        }
         // Return user without password
         const { password, ...userWithoutPassword } = user;
+        console.log("Firebase login successful for user:", user.id);
         res.json(userWithoutPassword);
       });
     } catch (error) {
+      console.error("Firebase login error:", error);
       next(error);
     }
   });

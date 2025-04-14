@@ -119,44 +119,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGoogle = async () => {
     try {
       // Start Firebase Google auth flow
+      console.log("Starting Firebase Google auth flow...");
       const result = await firebaseLoginWithGoogle();
+      console.log("Firebase login result:", result);
       
       if (result?.user) {
         // After successful Firebase auth, register/login the user with our API
         const firebaseUser: FirebaseUser = result.user;
+        console.log("Firebase user authenticated:", firebaseUser.uid);
         
         // Try to login with Firebase UID
         try {
+          const firebaseId = `firebase-${firebaseUser.uid}`;
+          console.log("Attempting to login with Firebase UID:", firebaseId);
+          
           const res = await apiRequest("POST", "/api/login-with-firebase", {
-            firebaseUid: firebaseUser.uid
+            firebaseUid: firebaseId
           });
           
           if (res.ok) {
+            console.log("Firebase login successful");
             const user = await res.json();
             queryClient.setQueryData(["/api/user"], user);
+            toast({
+              title: "Login successful",
+              description: `Welcome, ${user.displayName || user.username}!`,
+            });
             return user;
           } else {
             // If login fails, user might not exist in our DB yet, so register them
+            console.log("User not found, registering new user");
             const userData: RegisterData = {
               username: firebaseUser.email?.split('@')[0] || `user_${Date.now()}`,
               email: firebaseUser.email || `${Date.now()}@example.com`,
               password: `firebase_${Date.now()}`, // Will not be used for auth
               displayName: firebaseUser.displayName || undefined,
               photoURL: firebaseUser.photoURL || undefined,
-              firebaseUid: firebaseUser.uid
+              firebaseUid: firebaseId
             };
             
-            await registerMutation.mutateAsync(userData);
+            console.log("Registering with data:", userData);
+            const newUser = await registerMutation.mutateAsync(userData);
+            toast({
+              title: "Account created",
+              description: "Your account has been created successfully!",
+            });
+            return newUser;
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error("Firebase server auth error:", error);
+          toast({
+            title: "Authentication Error",
+            description: error.message || "Error authenticating with server",
+            variant: "destructive",
+          });
           throw error;
         }
+      } else {
+        console.error("No user returned from Firebase");
+        toast({
+          title: "Login Failed",
+          description: "No user data returned from Google authentication",
+          variant: "destructive",
+        });
+        throw new Error("No user data returned from Google authentication");
       }
-      
-      return result;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Google login error:", error);
+      // Only show toast if it's not a user-canceled operation
+      if (error.code !== "auth/cancelled-popup-request" && 
+          error.code !== "auth/popup-closed-by-user") {
+        toast({
+          title: "Google Login Failed",
+          description: error.message || "Failed to authenticate with Google",
+          variant: "destructive",
+        });
+      }
       throw error;
     }
   };
