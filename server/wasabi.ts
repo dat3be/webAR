@@ -235,6 +235,12 @@ export async function createPresignedPost(fileName: string, contentType: string,
   url: string;
   fields: Record<string, string>;
   key: string;
+  bucket?: string;
+  publicUrls?: {
+    url: string;
+    altUrl: string;
+    altUrl2: string;
+  };
 }> {
   const client = getWasabiClient();
   const bucket = getBucketName();
@@ -255,19 +261,25 @@ export async function createPresignedPost(fileName: string, contentType: string,
       ACL: 'public-read',
     });
     
+    // Mở rộng thời gian hết hạn của URL lên 30 phút
     const signedUrl = await getSignedUrl(client, command, { 
-      expiresIn: 15 * 60 // 15 phút
+      expiresIn: 30 * 60 // 30 phút
     });
     
     console.log(`[Wasabi] Created presigned URL for direct upload: ${signedUrl}`);
+    
+    // Tạo URL công khai cho tệp sau khi tải lên
+    const publicUrls = generatePublicUrl(bucket, key);
     
     return {
       url: signedUrl,
       fields: {
         'Content-Type': contentType,
-        'ACL': 'public-read',
+        'x-amz-acl': 'public-read',  // Đảm bảo ACL đúng định dạng
       },
-      key
+      key,
+      bucket: bucket,
+      publicUrls: publicUrls // Trả về URLs
     };
   } catch (error) {
     console.error(`[Wasabi] Error creating presigned post:`, error);

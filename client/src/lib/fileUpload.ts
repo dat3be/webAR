@@ -33,156 +33,123 @@ const fetchWithTimeout = async (url: string, options: RequestInit, timeout: numb
 };
 
 /**
- * Tạo bản sao tệp với kích thước được tối ưu
- * @param file Tệp gốc
- * @returns File mới đã được tối ưu (nếu cần)
- */
-const optimizeFileForUpload = async (file: File): Promise<File> => {
-  // Nếu tệp nhỏ hơn 150MB, không cần optimize
-  if (file.size <= 150 * 1024 * 1024) {
-    return file;
-  }
-  
-  console.log(`[fileUpload] Tệp quá lớn (${(file.size / (1024 * 1024)).toFixed(2)}MB), sẽ tối ưu kích thước`);
-  
-  // Đối với các tệp 3D model hoặc video, không làm gì - chỉ cảnh báo
-  if (file.type.startsWith('model/') || file.type.startsWith('video/')) {
-    console.warn(`[fileUpload] Cảnh báo: Tệp lớn (${(file.size / (1024 * 1024)).toFixed(2)}MB). Tệp lớn có thể gặp vấn đề khi tải lên.`);
-    return file;
-  }
-  
-  // Đối với các tệp ảnh, có thể thêm mã nén ảnh tối ưu ở đây
-  // (không triển khai trong phiên bản này)
-  
-  return file;
-};
-
-/**
- * Tải lên tệp trực tiếp đến Wasabi sử dụng Presigned URL
+ * Tải lên tệp đến API endpoint và trả về URL của tệp từ Wasabi
  * @param file Tệp cần tải lên
- * @returns Promise chứa URL công khai của tệp đã tải lên
+ * @returns Promise chứa URL của tệp đã tải lên
  */
 export async function uploadFile(file: File): Promise<string> {
   try {
-    console.log(`[fileUpload] Bắt đầu tải lên trực tiếp tệp: ${file.name} (${file.type}), kích thước: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
-    
-    // Tối ưu tệp nếu cần
-    const optimizedFile = await optimizeFileForUpload(file);
-    
-    // Thử upload tối đa 2 lần
-    let lastError = null;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`[fileUpload] Đang thử tải lên lần ${attempt}/2...`);
-        
-        // Bước 1: Lấy presigned URL từ server
-        console.log('[fileUpload] Bước 1: Yêu cầu presigned URL từ server');
-        const presignedResponse = await fetchWithTimeout('/api/presigned-upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileName: optimizedFile.name,
-            contentType: optimizedFile.type
-          }),
-          credentials: 'include' // Gửi kèm cookie xác thực
-        }, 10000); // timeout 10 giây cho bước này
-        
-        if (!presignedResponse.ok) {
-          const errorData = await presignedResponse.json().catch(() => ({ message: 'Lỗi không xác định' }));
-          throw new Error(`Không thể lấy presigned URL: ${errorData.message || presignedResponse.statusText}`);
-        }
-        
-        const presignedData = await presignedResponse.json();
-        console.log('[fileUpload] Đã nhận presigned URL:', presignedData.url);
-        
-        // Bước 2: Upload trực tiếp lên Wasabi bằng PUT request
-        console.log('[fileUpload] Bước 2: Tải lên tệp trực tiếp đến Wasabi');
-        const uploadResponse = await fetchWithTimeout(presignedData.url, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': optimizedFile.type,
-            'x-amz-acl': 'public-read',
-            ...presignedData.fields
-          },
-          body: optimizedFile
-        }, UPLOAD_TIMEOUT);
-        
-        if (!uploadResponse.ok) {
-          let errorMessage = `HTTP ${uploadResponse.status}: ${uploadResponse.statusText}`;
-          try {
-            const errorText = await uploadResponse.text();
-            if (errorText) {
-              errorMessage += ` - ${errorText}`;
-            }
-          } catch (err) {
-            // Ignore errors while getting error details
-          }
-          
-          throw new Error(`Lỗi tải lên trực tiếp đến Wasabi: ${errorMessage}`);
-        }
-        
-        console.log('[fileUpload] Tải lên thành công đến Wasabi');
-        
-        // Trả về URL công khai
-        const publicUrl = presignedData.publicUrls.url;
-        console.log(`[fileUpload] URL công khai: ${publicUrl}`);
-        
-        return publicUrl;
-      } catch (err: any) {
-        lastError = err;
-        console.error(`[fileUpload] Lỗi lần thử ${attempt}:`, err.message);
-        
-        // Nếu đây là lỗi về abort, không thử lại
-        if (err.name === 'AbortError') {
-          break;
-        }
-        
-        // Chờ 3 giây trước khi thử lại
-        if (attempt < 2) {
-          console.log('[fileUpload] Đang chờ 3 giây trước khi thử lại...');
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-      }
+    console.log(`[fileUpload] Bắt đầu tải lên tệp: ${file.name} (${file.type}), kích thước: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+
+    // Đối với mô hình 3D và video lớn, sử dụng phương thức server
+    if (file.type.startsWith('model/') || 
+        file.name.endsWith('.glb') || 
+        file.name.endsWith('.gltf') || 
+        file.size > 50 * 1024 * 1024) {
+      return await uploadViaServer(file);
     }
     
-    // Nếu không thành công sau các lần thử trực tiếp, thử phương pháp thông qua server
-    console.log('[fileUpload] Tải lên trực tiếp thất bại, thử tải lên qua server...');
-    return await uploadViaServer(optimizedFile);
-    
+    // Đối với các tệp khác (nhỏ hơn), thử phương thức direct upload
+    try {
+      console.log('[fileUpload] Thử phương thức direct upload');
+      return await uploadDirect(file);
+    } catch (error) {
+      console.log('[fileUpload] Direct upload thất bại, chuyển sang server upload:', error);
+      return await uploadViaServer(file);
+    }
+
   } catch (error: any) {
-    console.error('[fileUpload] Lỗi tải lên:', error);
+    console.error('[fileUpload] Lỗi tải lên tệp:', error);
     throw new Error(`Không thể tải lên tệp: ${error.message}`);
   }
 }
 
 /**
- * Phương pháp dự phòng: Tải lên qua server thay vì trực tiếp
+ * Tải lên tệp trực tiếp đến Wasabi sử dụng Presigned URL
+ * @param file Tệp cần tải lên
+ * @returns Promise chứa URL của tệp đã tải lên
+ */
+async function uploadDirect(file: File): Promise<string> {
+  // Bước 1: Lấy presigned URL từ server
+  console.log('[fileUpload:direct] Bước 1: Lấy presigned URL từ server');
+  const presignedResponse = await fetchWithTimeout('/api/presigned-upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type
+    }),
+    credentials: 'include'
+  }, 10000);
+  
+  if (!presignedResponse.ok) {
+    const errorData = await presignedResponse.json().catch(() => ({ message: 'Lỗi không xác định' }));
+    throw new Error(`Không thể lấy presigned URL: ${errorData.message || presignedResponse.statusText}`);
+  }
+  
+  const presignedData = await presignedResponse.json();
+  console.log('[fileUpload:direct] Đã nhận presigned URL:', presignedData.url);
+  
+  // Bước 2: Tải lên tệp trực tiếp đến Wasabi
+  console.log('[fileUpload:direct] Bước 2: Tải lên tệp trực tiếp đến Wasabi');
+  const uploadResponse = await fetchWithTimeout(presignedData.url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type,
+      'x-amz-acl': 'public-read'
+    },
+    body: file
+  }, UPLOAD_TIMEOUT);
+  
+  if (!uploadResponse.ok) {
+    throw new Error(`PUT request thất bại: ${uploadResponse.status} ${uploadResponse.statusText}`);
+  }
+  
+  console.log('[fileUpload:direct] Tải lên thành công đến Wasabi');
+  
+  // Xác định URL công khai
+  let publicUrl;
+  if (presignedData.publicUrls && presignedData.publicUrls.url) {
+    publicUrl = presignedData.publicUrls.url;
+  } else {
+    // Region và bucket mặc định nếu không tìm thấy trong dữ liệu
+    const region = process.env.WASABI_REGION || 'us-east-2';
+    const bucket = presignedData.bucket || 'arwebreplit';
+    publicUrl = `https://s3.${region}.wasabisys.com/${bucket}/${presignedData.key}`;
+  }
+  
+  console.log(`[fileUpload:direct] URL công khai: ${publicUrl}`);
+  return publicUrl;
+}
+
+/**
+ * Tải lên tệp qua server truyền thống
  * @param file Tệp cần tải lên
  * @returns Promise chứa URL của tệp đã tải lên
  */
 async function uploadViaServer(file: File): Promise<string> {
-  console.log(`[fileUpload] Đang tải lên qua server: ${file.name}`);
+  console.log('[fileUpload:server] Bắt đầu tải lên qua server API');
   
   // Tạo FormData để gửi tệp
   const formData = new FormData();
   formData.append('file', file);
   
-  // Gọi API tải lên với timeout
+  // Gọi API tải lên
   const response = await fetchWithTimeout('/api/upload', {
     method: 'POST',
     body: formData,
-    credentials: 'include' // Gửi kèm cookie xác thực
+    credentials: 'include'
   }, UPLOAD_TIMEOUT);
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: 'Lỗi không xác định' }));
-    throw new Error(`Lỗi tải lên qua server: ${errorData.message || response.statusText}`);
+    throw new Error(`Tải lên thất bại: ${errorData.message || response.statusText}`);
   }
   
   const data = await response.json();
-  console.log(`[fileUpload] Tải lên qua server thành công, URL: ${data.url}`);
+  console.log(`[fileUpload:server] Tải lên thành công, URL: ${data.url}`);
   
   return data.url;
 }
