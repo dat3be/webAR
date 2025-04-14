@@ -188,6 +188,60 @@ export function setupAuth(app: Express) {
       next(error);
     }
   });
+  
+  // Register with Firebase UID endpoint (for new Firebase users)
+  app.post("/api/register-with-firebase", async (req, res, next) => {
+    try {
+      console.log("Firebase registration attempt:", req.body);
+      const { username, email, password, displayName, photoURL, firebaseUid } = req.body;
+      
+      if (!firebaseUid) {
+        console.log("Firebase registration failed: Missing Firebase UID");
+        return res.status(400).json({ message: "Missing Firebase UID" });
+      }
+
+      // Check if user with this Firebase UID already exists
+      const existingUser = await storage.getUserByFirebaseUid(firebaseUid);
+      if (existingUser) {
+        console.log("Firebase registration failed: User already exists with this UID");
+        return res.status(400).json({ message: "User with this Firebase UID already exists" });
+      }
+      
+      // Check if username is taken
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        console.log("Firebase registration failed: Username already taken");
+        return res.status(400).json({ message: "Username already taken" });
+      }
+
+      // Create the user
+      console.log("Creating new user with Firebase UID:", firebaseUid);
+      const user = await storage.createUser({
+        username,
+        email,
+        password,
+        displayName,
+        photoURL,
+        firebaseUid
+      });
+
+      // Log the user in
+      req.login(user, (err) => {
+        if (err) {
+          console.log("Firebase registration session error:", err);
+          return next(err);
+        }
+        
+        // Return user without password
+        const { password, ...userWithoutPassword } = user;
+        console.log("Firebase registration successful, created user:", user.id);
+        res.status(201).json(userWithoutPassword);
+      });
+    } catch (error) {
+      console.error("Firebase registration error:", error);
+      next(error);
+    }
+  });
 
   // Logout endpoint
   app.post("/api/logout", (req, res) => {

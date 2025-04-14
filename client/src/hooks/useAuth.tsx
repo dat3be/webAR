@@ -158,8 +158,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               firebaseUid: firebaseId
             };
             
-            console.log("Registering with data:", userData);
-            const newUser = await registerMutation.mutateAsync(userData);
+            console.log("Registering Firebase user with data:", userData);
+            // Use our dedicated Firebase registration endpoint instead of the regular registration endpoint
+            const registerResponse = await apiRequest("POST", "/api/register-with-firebase", userData);
+            
+            if (!registerResponse.ok) {
+              const errorData = await registerResponse.json();
+              throw new Error(errorData.message || "Failed to register with Firebase credentials");
+            }
+            
+            const newUser = await registerResponse.json();
+            queryClient.setQueryData(["/api/user"], newUser);
+            
             toast({
               title: "Account created",
               description: "Your account has been created successfully!",
