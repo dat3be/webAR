@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Loader2, ArrowRight } from "lucide-react";
+import { GoogleLoginButtons } from "@/components/GoogleLoginButtons";
 
 // Define validation schemas for login and registration forms
 const loginSchema = z.object({
