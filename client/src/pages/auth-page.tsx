@@ -31,7 +31,11 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
   const [, navigate] = useLocation();
-  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  // Determine initial tab based on the path
+  const [location] = useLocation();
+  const initialTab = location === "/signup" ? "register" : "login";
+  const [activeTab, setActiveTab] = useState<"login" | "register">(initialTab);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toast } = useToast();
   const { user, loginMutation, registerMutation, loginWithGoogle } = useAuth();
 
@@ -93,11 +97,19 @@ export default function AuthPage() {
 
   // Handle Google sign-in
   const handleGoogleSignIn = async () => {
+    if (isGoogleLoading) return; // Prevent multiple clicks
+    
     try {
+      setIsGoogleLoading(true);
+      console.log("Starting Google sign-in process");
       await loginWithGoogle();
+      console.log("Google sign-in successful, navigating to dashboard");
       navigate("/dashboard");
     } catch (error) {
+      console.log("Google sign-in failed", error);
       // Error handling is done in useAuth hook via toast notifications
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 

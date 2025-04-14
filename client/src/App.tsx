@@ -26,6 +26,12 @@ function App() {
         <Route path="/auth">
           <AuthPage />
         </Route>
+        <Route path="/login">
+          <AuthPage />
+        </Route>
+        <Route path="/signup">
+          <AuthPage />
+        </Route>
         <ProtectedRoute path="/dashboard" component={DashboardWrapper} />
         <ProtectedRoute path="/create-project" component={CreateProjectWrapper} />
         <Route path="/view/:projectId">

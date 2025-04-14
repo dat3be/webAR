@@ -43,6 +43,8 @@ export const signupWithEmail = (email: string, password: string) => {
 };
 
 export const loginWithGoogle = async () => {
+  console.log("Starting Google login with Firebase...");
+  
   const provider = new GoogleAuthProvider();
   // Add scopes if needed
   provider.addScope('profile');
@@ -52,7 +54,23 @@ export const loginWithGoogle = async () => {
     prompt: 'select_account'
   });
   
-  return signInWithPopup(auth, provider);
+  try {
+    const result = await signInWithPopup(auth, provider);
+    console.log("Google auth completed successfully");
+    return result;
+  } catch (error: any) {
+    console.error("Firebase Google auth error:", error);
+    
+    // Only log as error if it's not a user cancellation
+    if (error.code !== "auth/cancelled-popup-request" && 
+        error.code !== "auth/popup-closed-by-user") {
+      console.error("Google authentication error:", error.code, error.message);
+    } else {
+      console.log("User closed the Google auth popup");
+    }
+    
+    throw error;
+  }
 };
 
 export const logout = () => signOut(auth);
