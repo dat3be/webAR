@@ -135,10 +135,11 @@ export default function CreateProject() {
       toast({
         title: "Success",
         description: "Project created successfully",
+        variant: "default"
       });
 
-      // Redirect to dashboard
-      navigate("/dashboard");
+      // Redirect to dashboard with refresh flag to force data reload
+      navigate("/dashboard?refresh=true");
     } catch (error: any) {
       console.error("Error creating project:", error);
       toast({

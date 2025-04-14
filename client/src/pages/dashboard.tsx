@@ -22,8 +22,18 @@ export default function Dashboard() {
     }
   }, [user, navigate]);
 
+  // Check if we need to force refresh data (e.g., coming from project creation)
+  useEffect(() => {
+    if (location.includes('refresh=true')) {
+      // Invalidate the projects query to force a refetch
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      // Clean up the URL by removing the refresh parameter
+      navigate("/dashboard", { replace: true });
+    }
+  }, [location, navigate]);
+
   // Fetch projects
-  const { data: projects, isLoading, error } = useQuery({
+  const { data: projects, isLoading, error, refetch } = useQuery({
     queryKey: ["/api/projects"],
     enabled: !!user
   });

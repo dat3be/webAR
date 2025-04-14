@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Image, AlertTriangle, CheckCircle, X, Info } from "lucide-react";
+import { Image as ImageIcon, AlertTriangle, CheckCircle, X, Info, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface ImageTargetUploadProps {
   onFileSelect: (file: File | null) => void;
@@ -14,12 +15,38 @@ export function ImageTargetUpload({ onFileSelect, value }: ImageTargetUploadProp
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputId = `image-upload-${Math.random().toString(36).substring(2, 9)}`;
+  const isMobile = useIsMobile();
   
   const acceptedFileTypes = ".jpg,.jpeg,.png";
   const maxSize = 10; // MB
   
+  // Cleanup error message after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  // Create preview URL when a file is selected
+  useEffect(() => {
+    // Clean up the preview URL when component unmounts
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, []);
+  
   const validateFile = (file: File): boolean => {
+    // Reset error state before validation
+    setError(null);
+    
     // Check file size
     const fileSizeInMB = file.size / (1024 * 1024);
     if (fileSizeInMB > maxSize) {
@@ -41,20 +68,30 @@ export function ImageTargetUpload({ onFileSelect, value }: ImageTargetUploadProp
     }
 
     // Create preview URL
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
-    setError(null);
     return true;
   };
 
   const handleFileChange = (files: FileList | null) => {
     if (files && files.length > 0) {
       const file = files[0];
-      if (validateFile(file)) {
-        onFileSelect(file);
-      } else {
-        onFileSelect(null);
-      }
+      
+      // Set uploading state
+      setIsUploading(true);
+      
+      // Use setTimeout to simulate processing (and give UI time to update)
+      setTimeout(() => {
+        if (validateFile(file)) {
+          onFileSelect(file);
+        } else {
+          onFileSelect(null);
+        }
+        setIsUploading(false);
+      }, 500);
     }
   };
 
@@ -75,19 +112,16 @@ export function ImageTargetUpload({ onFileSelect, value }: ImageTargetUploadProp
     handleFileChange(e.dataTransfer.files);
   };
 
-  const handleButtonClick = () => {
-    if (inputRef.current) {
-      inputRef.current.click();
-    }
-  };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleFileChange(e.target.files);
   };
   
   const removeFile = () => {
     onFileSelect(null);
-    setPreviewUrl(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
     if (inputRef.current) {
       inputRef.current.value = "";
     }
@@ -100,58 +134,74 @@ export function ImageTargetUpload({ onFileSelect, value }: ImageTargetUploadProp
           className={cn(
             "relative flex flex-col items-center justify-center w-full p-6 transition-all border-2 border-dashed rounded-lg",
             dragActive ? "border-primary bg-primary/5" : "border-gray-300 bg-gray-50",
-            error ? "border-red-400 bg-red-50" : ""
+            error ? "border-red-400 bg-red-50" : "",
+            isUploading ? "border-amber-400 bg-amber-50" : ""
           )}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
+          onDragEnter={!isMobile ? handleDrag : undefined}
+          onDragLeave={!isMobile ? handleDrag : undefined}
+          onDragOver={!isMobile ? handleDrag : undefined}
+          onDrop={!isMobile ? handleDrop : undefined}
         >
           <div className="flex flex-col items-center justify-center gap-4 text-center">
-            <div className="p-3 rounded-full bg-primary/10">
-              <Image className="w-8 h-8 text-primary" />
+            <div className={cn(
+              "p-3 rounded-full transition-all",
+              isUploading ? "bg-amber-100" : "bg-primary/10"
+            )}>
+              {isUploading ? (
+                <Upload className="w-8 h-8 text-amber-500 animate-pulse" />
+              ) : (
+                <ImageIcon className="w-8 h-8 text-primary" />
+              )}
             </div>
             
             <div className="space-y-2 text-center">
-              <h3 className="text-lg font-medium">Upload Target Image</h3>
+              <h3 className="text-lg font-medium">
+                {isUploading ? "Processing..." : "Upload Target Image"}
+              </h3>
               <p className="text-sm text-gray-500">
-                Upload an image for AR tracking (.jpg, .jpeg, .png)
+                {isUploading 
+                  ? "Please wait while we validate your image" 
+                  : "Upload an image for AR tracking (.jpg, .jpeg, .png)"
+                }
               </p>
               <p className="text-xs text-gray-400">
                 Max file size: {maxSize}MB
               </p>
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-2 mt-2">
-              <Button
-                type="button"
-                onClick={handleButtonClick}
-                variant="default"
-                className="relative"
-              >
-                Choose Image
-                <Input
-                  ref={inputRef}
-                  type="file"
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  accept={acceptedFileTypes}
-                  onChange={handleInputChange}
-                />
-              </Button>
-              <Button type="button" variant="outline">
-                Drag & Drop
-              </Button>
-            </div>
+            <label 
+              htmlFor={fileInputId}
+              className={cn(
+                "w-full max-w-xs px-4 py-2 text-sm text-center text-white bg-primary rounded-md cursor-pointer transition-opacity",
+                isUploading ? "opacity-50 pointer-events-none" : "hover:opacity-90"
+              )}
+            >
+              {isUploading ? "Processing..." : "Choose Image"}
+            </label>
+            <input
+              id={fileInputId}
+              ref={inputRef}
+              type="file"
+              className="hidden"
+              accept={acceptedFileTypes}
+              onChange={handleInputChange}
+              disabled={isUploading}
+            />
             
-            <div className="flex items-center gap-2 mt-2 text-amber-600 bg-amber-50 p-2 rounded text-xs w-full">
+            {/* Conditionally show drag & drop text only on desktop */}
+            {!isMobile && (
+              <p className="text-xs text-gray-400 mt-2">Or drag and drop image here</p>
+            )}
+            
+            <div className="flex items-center gap-2 mt-2 text-amber-600 bg-amber-50 p-3 rounded-md text-xs w-full max-w-xs">
               <Info className="w-4 h-4 flex-shrink-0" />
-              <span>For best results, use high-contrast images with distinct features</span>
+              <span className="text-left">For best results, use high-contrast images with distinct features</span>
             </div>
             
             {error && (
-              <div className="flex items-center gap-2 mt-2 text-red-500">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-xs">{error}</span>
+              <div className="flex items-center gap-2 mt-2 text-red-500 bg-red-50 p-2 rounded-md w-full max-w-xs">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span className="text-xs text-left">{error}</span>
               </div>
             )}
           </div>
@@ -162,7 +212,7 @@ export function ImageTargetUpload({ onFileSelect, value }: ImageTargetUploadProp
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white"
+              className="h-8 w-8 rounded-full bg-white/80 hover:bg-white hover:text-red-500"
               onClick={removeFile}
             >
               <X className="h-4 w-4" />
@@ -193,16 +243,20 @@ export function ImageTargetUpload({ onFileSelect, value }: ImageTargetUploadProp
                     </p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline" onClick={handleButtonClick}>
+                <label 
+                  htmlFor={fileInputId}
+                  className="inline-flex h-8 items-center justify-center rounded-md bg-gray-100 px-3 text-xs font-medium transition-colors hover:bg-gray-200 cursor-pointer"
+                >
                   Change
-                  <Input
-                    ref={inputRef}
-                    type="file"
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                    accept={acceptedFileTypes}
-                    onChange={handleInputChange}
-                  />
-                </Button>
+                </label>
+                <input
+                  id={fileInputId}
+                  ref={inputRef}
+                  type="file"
+                  className="hidden"
+                  accept={acceptedFileTypes}
+                  onChange={handleInputChange}
+                />
               </div>
             </div>
           </CardContent>
