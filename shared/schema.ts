@@ -16,7 +16,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   displayName: text("display_name"),
   photoURL: text("photo_url"),
-  firebaseUid: text("firebase_uid").notNull().unique(),
+  firebaseUid: text("firebase_uid").unique(), // Removed notNull to support both traditional and Firebase users
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

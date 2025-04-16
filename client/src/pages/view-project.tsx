@@ -5,11 +5,20 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, X, RotateCcw, Camera, Move3d, ZoomIn, ZoomOut, 
-  RefreshCw, Maximize2, Info, Share2, Check
+  RefreshCw, Maximize2, Info, Share2, Check, Download
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { Project } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { MindFileGenerator } from "@/components/MindFileGenerator";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 // Define the interface for mindar and THREE to avoid typescript errors
 declare global {
@@ -35,6 +44,7 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
   const [showControls, setShowControls] = useState(false);
   const [showTutorial, setShowTutorial] = useState(true);
   const [showShareSuccess, setShowShareSuccess] = useState(false);
+  const [showMindFileDialog, setShowMindFileDialog] = useState(false);
   const isMobile = useIsMobile();
   const [modelOptions, setModelOptions] = useState({
     rotation: 0,
@@ -116,27 +126,27 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
 
   // Load all required scripts
   const loadScripts = async () => {
+    // Load base A-Frame for both types
+    await loadScript("https://aframe.io/releases/1.4.2/aframe.min.js");
+    
     if (project?.type === "image-tracking") {
       // Load MindAR scripts for image tracking
       await loadScript("https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js");
-      await loadScript("https://aframe.io/releases/1.4.2/aframe.min.js");
       await loadScript("https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js");
     } else {
-      // Load AR.js scripts for markerless AR
-      await loadScript("https://aframe.io/releases/1.4.2/aframe.min.js");
-      await loadScript("https://cdn.jsdelivr.net/npm/aframe-ar@0.3.0/index.min.js");
-      await loadScript("https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js");
-      await loadScript("https://cdn.jsdelivr.net/npm/aframe-environment-component@1.3.2/dist/aframe-environment-component.min.js");
+      // Load MindAR scripts for face/markerless tracking
+      await loadScript("https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-face.prod.js");
+      await loadScript("https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-face-aframe.prod.js");
     }
     
     if (project?.contentType === "3d-model") {
       // Load GLTF loader and animation extras
       await loadScript("https://cdn.jsdelivr.net/npm/aframe-extras@7.0.0/dist/aframe-extras.min.js");
-      await loadScript("https://cdn.jsdelivr.net/npm/aframe-orbit-controls@1.3.0/dist/aframe-orbit-controls.min.js");
     }
     
-    // Load gesture handler component for touch interactions
-    await loadScript("https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-handler.js");
+    // Custom gesture handler for touch interactions
+    await loadScript("https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/gesture-detector.js");
+    await loadScript("https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/gesture-handler.js");
   };
 
   const loadScript = (src: string): Promise<void> => {
@@ -157,24 +167,66 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
     if (!project) return;
     
     try {
-      setStatus("Loading AR libraries...");
-      await loadScripts();
-      
-      setStatus("Initializing AR experience...");
+      setStatus("Loading AR experience...");
       
       // Clear previous AR scene if exists
       if (sceneRef.current) {
         sceneRef.current.innerHTML = "";
         
-        // Create new scene based on project type
-        if (project.type === "image-tracking") {
-          createImageTrackingScene();
-        } else {
-          createMarkerlessScene();
-        }
+        // Create iframe to load server-generated AR HTML
+        const iframe = document.createElement('iframe');
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.allow = "camera; microphone; accelerometer; gyroscope; magnetometer; xr-spatial-tracking";
+        iframe.referrerPolicy = "no-referrer";
+        iframe.src = `/api/generate-ar-html/${project.id}`;
+        
+        // Add a loading overlay until iframe loads
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.className = 'absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center text-white';
+        loadingOverlay.innerHTML = `
+          <div class="animate-spin h-10 w-10 border-t-2 border-l-2 border-white rounded-full mb-4"></div>
+          <h3 class="text-lg font-medium mb-2">Loading AR Experience</h3>
+          <p class="text-sm text-gray-300">Please wait while we prepare your AR experience...</p>
+          <p class="text-sm text-gray-300 mt-2">You'll need to allow camera access when prompted</p>
+        `;
+        
+        sceneRef.current.appendChild(iframe);
+        sceneRef.current.appendChild(loadingOverlay);
+        
+        // Remove loading overlay when iframe loads
+        iframe.onload = () => {
+          loadingOverlay.remove();
+          setIsLoading(false);
+          setStatus("AR experience loaded");
+          
+          // Auto-enter fullscreen on mobile
+          if (isMobile && document.documentElement.requestFullscreen) {
+            try {
+              document.documentElement.requestFullscreen();
+            } catch (e) {
+              console.warn("Failed to enter fullscreen:", e);
+            }
+          }
+          
+          setTargetFound(false);
+          setShowControls(true);
+        };
+        
+        // Handle iframe load errors
+        iframe.onerror = () => {
+          loadingOverlay.remove();
+          setIsLoading(false);
+          setStatus("Failed to load AR experience");
+          
+          toast({
+            title: "Error",
+            description: "Failed to load AR experience. Please try again.",
+            variant: "destructive",
+          });
+        };
       }
-      
-      setIsLoading(false);
     } catch (error) {
       console.error("Error setting up AR:", error);
       toast({
@@ -314,75 +366,89 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
     sceneRef.current.appendChild(sceneEl);
   };
 
-  // Create a scene for markerless AR
+  // Create a scene for markerless AR using MindAR face tracking
   const createMarkerlessScene = () => {
     if (!project || !sceneRef.current) return;
     
-    // Create the scene
+    // Create the scene with MindAR face tracking
     const sceneEl = document.createElement("a-scene");
-    sceneEl.setAttribute("embedded", "");
-    sceneEl.setAttribute("arjs", "sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;");
+    sceneEl.setAttribute("mindar-face", "autoStart: true; maxDetectedFaces: 1; filterMinCF: 0.0001; filterBeta: 10;");
+    sceneEl.setAttribute("color-space", "sRGB");
+    sceneEl.setAttribute("renderer", "colorManagement: true; physicallyCorrectLights: true; antialias: true");
     sceneEl.setAttribute("vr-mode-ui", "enabled: false");
-    sceneEl.setAttribute("renderer", "logarithmicDepthBuffer: true; antialias: true");
     sceneEl.setAttribute("device-orientation-permission-ui", "enabled: false");
     
-    // Create the camera and cursor
-    const camera = document.createElement("a-entity");
-    camera.setAttribute("camera", "");
+    // Create the camera
+    const camera = document.createElement("a-camera");
+    camera.setAttribute("active", "false");
     camera.setAttribute("position", "0 0 0");
+    camera.setAttribute("look-controls", "enabled: false");
+    sceneEl.appendChild(camera);
     
-    const cursor = document.createElement("a-entity");
-    cursor.setAttribute("cursor", "fuse: false");
-    cursor.setAttribute("position", "0 0 -1");
-    cursor.setAttribute("geometry", "primitive: ring; radiusInner: 0.02; radiusOuter: 0.03");
-    cursor.setAttribute("material", "color: white; shader: flat");
-    camera.appendChild(cursor);
+    // Add light
+    const ambientLight = document.createElement("a-light");
+    ambientLight.setAttribute("type", "ambient");
+    ambientLight.setAttribute("intensity", "0.7");
+    ambientLight.setAttribute("color", "#ffffff");
+    sceneEl.appendChild(ambientLight);
     
-    // Create anchor for placing content
-    const anchor = document.createElement("a-anchor");
-    anchor.setAttribute("hit-test-enabled", "true");
+    const directionalLight = document.createElement("a-light");
+    directionalLight.setAttribute("type", "directional");
+    directionalLight.setAttribute("intensity", "0.5");
+    directionalLight.setAttribute("color", "#ffffff");
+    directionalLight.setAttribute("position", "0 1 1");
+    sceneEl.appendChild(directionalLight);
     
-    // Set anchored status when hit-test detects surface
-    anchor.addEventListener("hit-test-select", () => {
+    // Create face anchor
+    const anchor = document.createElement("a-entity");
+    anchor.setAttribute("mindar-face-target", "anchorIndex: 1"); // Use anchor point 1 (forehead)
+    
+    // Set target found/lost event handlers
+    anchor.addEventListener("targetFound", () => {
       setTargetFound(true);
       setShowControls(true);
     });
     
+    anchor.addEventListener("targetLost", () => {
+      setTargetFound(false);
+    });
+    
+    // Add gesture detector to the scene
+    const gestureDetector = document.createElement("a-entity");
+    gestureDetector.setAttribute("gesture-detector", "");
+    sceneEl.appendChild(gestureDetector);
+    
     // Add content based on content type
     if (project.contentType === "3d-model") {
-      // Add 3D model
+      // Add 3D model with gesture handler
+      const container = document.createElement("a-entity");
+      container.setAttribute("position", "0 0 -0.3"); // Position in front of face
+      
       const model = document.createElement("a-gltf-model");
-      model.setAttribute("position", "0 0 0");
       model.setAttribute("rotation", `0 ${modelOptions.rotation} 0`);
+      model.setAttribute("position", "0 0 0");
       model.setAttribute("scale", `${modelOptions.scale} ${modelOptions.scale} ${modelOptions.scale}`);
       model.setAttribute("src", project.modelUrl);
+      model.setAttribute("animation-mixer", "clip: *; loop: repeat; timeScale: 1");
       model.setAttribute("gesture-handler", "minScale: 0.1; maxScale: 2");
-      model.setAttribute("animation-mixer", "clip: *; loop: repeat;");
-      
-      // Shadow
-      const shadow = document.createElement("a-circle");
-      shadow.setAttribute("position", "0 -0.01 0");
-      shadow.setAttribute("rotation", "-90 0 0");
-      shadow.setAttribute("radius", "0.5");
-      shadow.setAttribute("material", "shader: flat; opacity: 0.4; color: #000");
-      anchor.appendChild(shadow);
+      model.setAttribute("class", "clickable");
       
       // Add animations
-      const pulseAnimation = document.createElement("a-animation");
-      pulseAnimation.setAttribute("attribute", "scale");
-      pulseAnimation.setAttribute("from", `${modelOptions.scale} ${modelOptions.scale} ${modelOptions.scale}`);
-      pulseAnimation.setAttribute("to", `${modelOptions.scale * 1.1} ${modelOptions.scale * 1.1} ${modelOptions.scale * 1.1}`);
-      pulseAnimation.setAttribute("direction", "alternate");
-      pulseAnimation.setAttribute("dur", "1500");
-      pulseAnimation.setAttribute("repeat", "indefinite");
-      pulseAnimation.setAttribute("easing", "ease-in-out");
+      const rotationAnimation = document.createElement("a-animation");
+      rotationAnimation.setAttribute("attribute", "rotation");
+      rotationAnimation.setAttribute("dur", "10000");
+      rotationAnimation.setAttribute("fill", "forwards");
+      rotationAnimation.setAttribute("to", "0 360 0");
+      rotationAnimation.setAttribute("repeat", "indefinite");
+      rotationAnimation.setAttribute("easing", "linear");
       
-      model.appendChild(pulseAnimation);
-      anchor.appendChild(model);
+      model.appendChild(rotationAnimation);
+      container.appendChild(model);
+      anchor.appendChild(container);
     } else if (project.contentType === "video") {
       // Add video
       const videoAsset = document.createElement("video");
-      videoAsset.setAttribute("id", "ar-video");
+      videoAsset.setAttribute("id", "ar-video-face");
       videoAsset.setAttribute("src", project.modelUrl);
       videoAsset.setAttribute("preload", "auto");
       videoAsset.setAttribute("loop", "true");
@@ -391,34 +457,40 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
       videoAsset.setAttribute("crossorigin", "anonymous");
       videoAsset.muted = true;
       
-      // Autoplay video
-      videoAsset.play().catch(e => console.error("Error autoplaying video:", e));
-      
       const assets = document.createElement("a-assets");
       assets.appendChild(videoAsset);
       sceneEl.appendChild(assets);
       
+      // Start video when face is detected
+      anchor.addEventListener("targetFound", () => {
+        videoAsset.play().catch(e => console.error("Error playing video:", e));
+      });
+      
+      // Create container for video positioning
+      const container = document.createElement("a-entity");
+      container.setAttribute("position", "0 0 -0.5"); // Position in front of face
+      
+      // Create video plane
       const videoPlane = document.createElement("a-plane");
-      videoPlane.setAttribute("position", "0 0.5 0");
-      videoPlane.setAttribute("rotation", "-90 0 0");
-      videoPlane.setAttribute("width", "1.6");
-      videoPlane.setAttribute("height", "0.9");
-      videoPlane.setAttribute("material", "src: #ar-video; transparent: true; shader: flat");
+      videoPlane.setAttribute("position", "0 0 0");
+      videoPlane.setAttribute("width", "1");
+      videoPlane.setAttribute("height", "0.6");
+      videoPlane.setAttribute("material", "src: #ar-video-face; transparent: true; shader: flat");
+      videoPlane.setAttribute("class", "clickable");
+      videoPlane.setAttribute("gesture-handler", "");
       
-      // Shadow
-      const shadow = document.createElement("a-circle");
-      shadow.setAttribute("position", "0 0.01 0");
-      shadow.setAttribute("rotation", "-90 0 0");
-      shadow.setAttribute("radius", "0.8");
-      shadow.setAttribute("material", "shader: flat; opacity: 0.3; color: #000");
-      anchor.appendChild(shadow);
-      
-      anchor.appendChild(videoPlane);
+      container.appendChild(videoPlane);
+      anchor.appendChild(container);
     }
     
     sceneEl.appendChild(anchor);
-    sceneEl.appendChild(camera);
     sceneRef.current.appendChild(sceneEl);
+    
+    // Face tracking detected - show success after short delay
+    setTimeout(() => {
+      setTargetFound(true);
+      setShowControls(true);
+    }, 3000);
   };
 
   const handleBack = () => {
@@ -521,7 +593,7 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
             <p className="text-white/70 text-sm mt-2 text-center">
               {project?.type === "image-tracking" 
                 ? "Please allow camera access when prompted" 
-                : "Preparing markerless AR experience"}
+                : "Please allow camera access for face tracking AR"}
             </p>
           </div>
         </div>
@@ -546,7 +618,7 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
               </p>
             ) : (
               <p className="text-gray-700 text-sm">
-                Move your phone around to detect surfaces. Tap on a surface to place the AR content. You can then move around to view it from different angles.
+                Position your face in the center of the screen. The AR content will appear in front of your face. You can rotate your head to see it from different angles.
               </p>
             )}
             <Button 
@@ -567,12 +639,12 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
           </Button>
           {!targetFound ? (
             <span className="mx-2 text-white font-medium text-sm animate-pulse">
-              {project?.type === "image-tracking" ? "Scanning for image..." : "Detecting surfaces..."}
+              {project?.type === "image-tracking" ? "Scanning for image..." : "Detecting face..."}
             </span>
           ) : (
             <span className="mx-2 text-white font-medium text-sm flex items-center">
               <Check className="h-4 w-4 mr-1 text-green-400" />
-              {project?.type === "image-tracking" ? "Target found" : "Placed on surface"}
+              {project?.type === "image-tracking" ? "Target found" : "Face detected"}
             </span>
           )}
         </div>
@@ -598,6 +670,18 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
           >
             <Share2 className="h-5 w-5" />
           </Button>
+          
+          {/* Add Mind File Generator button only for image-tracking projects */}
+          {project?.type === 'image-tracking' && (
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="rounded-full bg-black bg-opacity-50 backdrop-blur-md border-none hover:bg-black hover:bg-opacity-70 text-white"
+              onClick={() => setShowMindFileDialog(true)}
+            >
+              <Download className="h-5 w-5" />
+            </Button>
+          )}
           
           <Button 
             variant="outline" 
@@ -662,6 +746,24 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
           </div>
         </div>
       )}
+      
+      {/* Mind File Generator Dialog */}
+      <Dialog open={showMindFileDialog} onOpenChange={setShowMindFileDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate .mind File</DialogTitle>
+            <DialogDescription>
+              Create a compiled .mind file for use with the MindAR library in custom AR applications.
+            </DialogDescription>
+          </DialogHeader>
+          {project && (
+            <MindFileGenerator 
+              projectId={project.id} 
+              targetImageUrl={project.targetImageUrl} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

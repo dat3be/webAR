@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModelUpload } from "@/components/ui/model-upload";
 import { ImageTargetUpload } from "@/components/ui/image-target-upload";
+import { ImageEvaluator } from "@/components/ui/image-evaluator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { uploadFile } from "@/lib/fileUpload";
@@ -456,6 +457,12 @@ export default function CreateProject() {
                       value={targetImage}
                     />
                   </div>
+                  
+                  {targetImage && (
+                    <div className="flex justify-center my-4">
+                      <ImageEvaluator image={targetImage} />
+                    </div>
+                  )}
                   
                   <div className="pt-4 flex justify-between">
                     <Button

@@ -160,16 +160,13 @@ export function setupAuth(app: Express) {
   app.post("/api/login-with-firebase", async (req, res, next) => {
     try {
       console.log("Firebase login attempt with body:", req.body);
-      const { firebaseUid, email } = req.body;
+      const { firebaseUid, email, displayName, photoURL } = req.body;
       if (!firebaseUid) {
         console.log("Firebase login failed: Missing Firebase UID");
         return res.status(400).json({ message: "Missing Firebase UID" });
       }
 
       console.log("Looking up user with Firebase UID:", firebaseUid);
-      
-      // Debug storage methods
-      console.log("Storage methods:", Object.keys(storage));
       
       // First try to find the user by Firebase UID
       let user = await storage.getUserByFirebaseUid(firebaseUid);
@@ -181,23 +178,48 @@ export function setupAuth(app: Express) {
         const userByEmail = await storage.getUserByEmail(email);
         
         if (userByEmail) {
-          console.log(`Found user with email ${email}. Updating their Firebase UID from ${userByEmail.firebaseUid} to ${firebaseUid}`);
+          console.log(`Found user with email ${email}. Updating their Firebase UID from ${userByEmail.firebaseUid || 'null'} to ${firebaseUid}`);
           
           // Update the user's Firebase UID
           user = await storage.updateUserFirebaseUid(userByEmail.id, firebaseUid);
           console.log("User Firebase UID updated successfully:", user.id, user.username, user.firebaseUid);
         } else {
-          console.log(`No user found with email: ${email}`);
+          // No user found by email either - create a new user
+          console.log(`No user found with email: ${email}. Creating new user automatically.`);
+          
+          // Generate a username from email
+          const emailPrefix = email.split('@')[0];
+          const randomSuffix = Math.floor(Math.random() * 10000);
+          const username = `${emailPrefix}_${randomSuffix}`;
+          
+          // Generate a random secure password (won't be used for login)
+          const randomPassword = `firebase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+          
+          // Create the new user
+          try {
+            user = await storage.createUser({
+              username,
+              email,
+              password: await hashPassword(randomPassword), // Hash the random password
+              displayName: displayName || username,
+              photoURL,
+              firebaseUid
+            });
+            console.log("New user created successfully from Firebase login:", user.id, user.username);
+          } catch (createError) {
+            console.error("Error creating new user from Firebase data:", createError);
+            return res.status(500).json({ message: "Failed to create user account" });
+          }
         }
       }
       
-      // If still no user found, return 404
+      // If still no user found (unlikely at this point), return 404
       if (!user) {
         console.log("Firebase login failed: User not found with UID:", firebaseUid, "or email:", email);
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ message: "User not found and could not be created" });
       }
 
-      console.log("Firebase user found:", user.id, user.username);
+      console.log("Firebase user found or created:", user.id, user.username);
       req.login(user, (err) => {
         if (err) {
           console.log("Firebase login session error:", err);

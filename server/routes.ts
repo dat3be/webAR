@@ -5,11 +5,12 @@ import { z } from "zod";
 import { insertProjectSchema, insertUserSchema, updateProjectSchema } from "@shared/schema";
 import { checkDatabaseConnection } from "./db";
 import { setupAuth } from "./auth";
-import { uploadFile, wasabiClient, bucketName, createPresignedPost, getPublicUrl } from "./wasabi";
+import { uploadFile, wasabiClient, bucketName, createPresignedPost, getPublicUrl, getKeyFromUrl, downloadFile } from "./wasabi";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import multer from "multer";
 import * as path from "path";
+import { processTargetImage, generateImageTrackingHtml, generateMarkerlessHtml, generateMindFile } from "./mindar-helper";
 
 // Middleware to check if database is connected
 const checkDbConnection = async (req: Request, res: Response, next: NextFunction) => {
@@ -502,6 +503,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Process target image route - convert uploaded image to .mind file
+  app.post("/api/process-target-image", isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image file uploaded" });
+      }
+
+      // Check if this is an image file
+      const mimeType = req.file.mimetype;
+      if (!mimeType.startsWith('image/')) {
+        return res.status(400).json({ 
+          message: "Invalid file type", 
+          details: "Only image files (JPEG, PNG) are allowed for target images" 
+        });
+      }
+
+      console.log(`[API:ProcessTargetImage] Processing target image: ${req.file.originalname} (${req.file.size} bytes)`);
+      
+      // Process the target image through MindAR helper
+      const result = await processTargetImage(req.file.buffer);
+      
+      console.log(`[API:ProcessTargetImage] Target image processed successfully. Mind URL: ${result.mindFileUrl}`);
+      
+      res.status(200).json(result);
+    } catch (error) {
+      console.error("[API:ProcessTargetImage] Error processing target image:", error);
+      handleApiError(error, res);
+    }
+  });
+  
+  // Compile image to .mind file endpoint - used by the image evaluator
+  app.post("/api/compile-mind-file", upload.single('image'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No image uploaded' });
+      }
+
+      console.log(`[API:CompileMindFile] Compiling image to .mind file: ${req.file.originalname}`);
+      console.log(`[API:CompileMindFile] Size: ${req.file.size} bytes`);
+      
+      // Generate a unique ID for this compilation
+      const compilationId = `compile_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      
+      // Generate the .mind file using our helper
+      const imageBuffer = req.file.buffer;
+      const result = await generateMindFile(imageBuffer, compilationId);
+      
+      console.log(`[API:CompileMindFile] Image compiled successfully. Mind file URL: ${result.mindFileUrl}`);
+      
+      res.json({
+        mindFileUrl: result.mindFileUrl,
+        message: 'Mind file compiled successfully'
+      });
+    } catch (error) {
+      console.error('Error compiling .mind file:', error);
+      handleApiError(error, res);
+    }
+  });
+  
+  // Generate WebAR HTML for project
+  app.get("/api/generate-ar-html/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      // Record project view for analytics
+      await storage.recordProjectView(id);
+      
+      // Generate HTML based on project type
+      let html = '';
+      
+      if (project.type === 'image-tracking') {
+        if (!project.targetImageUrl) {
+          return res.status(400).json({ message: "Target image URL is missing" });
+        }
+        
+        html = generateImageTrackingHtml(
+          project.id.toString(), 
+          project.name, 
+          project.targetImageUrl, 
+          project.modelUrl, 
+          project.contentType
+        );
+      } else if (project.type === 'markerless') {
+        html = generateMarkerlessHtml(
+          project.id.toString(),
+          project.name,
+          project.modelUrl,
+          project.contentType
+        );
+      } else {
+        return res.status(400).json({ message: "Invalid project type" });
+      }
+      
+      // Set content type to HTML
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    } catch (error) {
+      console.error("[API:GenerateARHTML] Error generating AR HTML:", error);
+      handleApiError(error, res);
+    }
+  });
+  
+  // Generate .mind file from target image for a project
+  app.post("/api/generate-mind-file/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      // Check if project has a target image
+      if (project.type !== 'image-tracking' || !project.targetImageUrl) {
+        return res.status(400).json({ 
+          message: "Invalid project type or missing target image",
+          details: "Only image-tracking projects with a target image can generate .mind files"
+        });
+      }
+      
+      console.log(`[API:GenerateMindFile] Generating .mind file for project ${id} with target image: ${project.targetImageUrl}`);
+      
+      // Download the target image from Wasabi
+      const targetImageKey = getKeyFromUrl(project.targetImageUrl);
+      const imageBuffer = await downloadFile(targetImageKey);
+      
+      // Generate a proper .mind file
+      const mindFileResult = await generateMindFile(imageBuffer, project.id.toString());
+      
+      console.log(`[API:GenerateMindFile] .mind file generated successfully: ${mindFileResult.mindFileUrl}`);
+      
+      res.status(200).json(mindFileResult);
+    } catch (error) {
+      console.error("[API:GenerateMindFile] Error generating .mind file:", error);
+      handleApiError(error, res);
+    }
+  });
+  
   const httpServer = createServer(app);
   return httpServer;
 }
