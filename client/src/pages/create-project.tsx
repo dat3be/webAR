@@ -10,12 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModelUpload } from "@/components/ui/model-upload";
 import { ImageTargetUpload } from "@/components/ui/image-target-upload";
-import { MindFileUpload } from "@/components/ui/mind-file-upload";
 import { ImageEvaluator } from "@/components/ui/image-evaluator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { uploadFile } from "@/lib/fileUpload";
-import { Loader2, Image, Box, Film, Square, FileIcon } from "lucide-react";
+import { Loader2, Image, Box, Film, Square } from "lucide-react";
 
 export default function CreateProject() {
   const [location, navigate] = useLocation();
@@ -39,9 +38,6 @@ export default function CreateProject() {
   const [contentType, setContentType] = useState<"3d-model" | "video">("3d-model");
   const [model, setModel] = useState<File | null>(null);
   const [targetImage, setTargetImage] = useState<File | null>(null);
-  const [mindFile, setMindFile] = useState<File | null>(null);
-  const [isGeneratingMindFile, setIsGeneratingMindFile] = useState(false);
-  const [targetImageUrl, setTargetImageUrl] = useState<string | null>(null);
 
   // Progress validation
   const detailsComplete = name.trim().length > 0;
@@ -112,16 +108,6 @@ export default function CreateProject() {
         console.log("Uploading target image:", targetImage.name);
         targetImageUrl = await uploadFile(targetImage);
         console.log("Target image uploaded successfully, URL:", targetImageUrl);
-        // Save target image URL to state for possible mind file generation
-        setTargetImageUrl(targetImageUrl);
-      }
-      
-      // Upload .mind file if provided
-      let mindFileUrl = null;
-      if (arType === "image-tracking" && mindFile) {
-        console.log("Uploading .mind file:", mindFile.name);
-        mindFileUrl = await uploadFile(mindFile);
-        console.log(".mind file uploaded successfully, URL:", mindFileUrl);
       }
 
       // Create project in our backend
@@ -132,7 +118,6 @@ export default function CreateProject() {
         contentType,
         modelUrl,
         targetImageUrl: targetImageUrl || null,
-        mindFileUrl,
       });
       
       // Add status field to the request body with default "active" value
@@ -143,7 +128,6 @@ export default function CreateProject() {
         contentType,
         modelUrl,
         targetImageUrl: targetImageUrl || null,
-        mindFileUrl,
         status: "active", // Ensure status is set properly
       });
       
@@ -469,14 +453,7 @@ export default function CreateProject() {
                     </div>
                     
                     <ImageTargetUpload
-                      onFileSelect={(file) => {
-                        setTargetImage(file);
-                        // Reset mind file when target image changes
-                        if (file === null) {
-                          setMindFile(null);
-                          setTargetImageUrl(null);
-                        }
-                      }}
+                      onFileSelect={setTargetImage}
                       value={targetImage}
                     />
                   </div>
@@ -484,69 +461,6 @@ export default function CreateProject() {
                   {targetImage && (
                     <div className="flex justify-center my-4">
                       <ImageEvaluator image={targetImage} />
-                    </div>
-                  )}
-                  
-                  {targetImage && (
-                    <div className="mt-8 space-y-3 border-t pt-6">
-                      <div>
-                        <Label className="text-base">
-                          .mind File <span className="text-gray-400 font-normal">(Optional)</span>
-                        </Label>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Upload a pre-compiled .mind file for enhanced AR tracking performance
-                        </p>
-                      </div>
-                      
-                      <MindFileUpload
-                        onFileSelect={setMindFile}
-                        value={mindFile}
-                        targetImageUrl={targetImageUrl}
-                        showGenerateOption={!!targetImage && !!targetImageUrl}
-                        onGenerateRequest={async () => {
-                          if (!targetImageUrl) return;
-                          
-                          try {
-                            setIsGeneratingMindFile(true);
-                            toast({
-                              title: "Generating .mind file",
-                              description: "Please wait, this may take a moment...",
-                            });
-                            
-                            // Call API to generate mind file
-                            const projectId = 0; // Temporary ID for generation
-                            const response = await apiRequest("POST", `/api/generate-mind-file-from-image`, {
-                              targetImageUrl
-                            });
-                            
-                            const data = await response.json();
-                            
-                            if (data.mindFileUrl) {
-                              toast({
-                                title: "Mind file generated",
-                                description: "The .mind file was successfully generated and will be used for improved tracking.",
-                              });
-                              
-                              // Download the mind file for the user
-                              const link = document.createElement('a');
-                              link.href = data.mindFileUrl;
-                              link.download = `tracking-data.mind`;
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                            }
-                          } catch (error) {
-                            console.error("Error generating mind file:", error);
-                            toast({
-                              title: "Generation failed",
-                              description: "Failed to generate .mind file. Please try again or use your own file.",
-                              variant: "destructive"
-                            });
-                          } finally {
-                            setIsGeneratingMindFile(false);
-                          }
-                        }}
-                      />
                     </div>
                   )}
                   
