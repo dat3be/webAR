@@ -277,8 +277,18 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
 /**
  * Generate a WebAR HTML code that can be embedded for image tracking
  */
-export function generateImageTrackingHtml(projectId: string, projectName: string, targetImageUrl: string, modelUrl: string, contentType: 'video' | '3d-model'): string {
+export function generateImageTrackingHtml(
+  projectId: string, 
+  projectName: string, 
+  targetImageUrl: string, 
+  modelUrl: string, 
+  contentType: 'video' | '3d-model',
+  mindFileUrl?: string
+): string {
   const isVideo = contentType === 'video';
+  
+  // Determine which tracking source to use - .mind file is preferred
+  const trackingSrc = mindFileUrl || targetImageUrl;
   
   return `
 <!DOCTYPE html>
@@ -399,6 +409,7 @@ export function generateImageTrackingHtml(projectId: string, projectName: string
             </div>
             <p>Point your camera at the target image shown above. Keep the image in view for the best experience.</p>
             <p>Once the target is detected, the AR content will appear on top of it.</p>
+            ${mindFileUrl ? '<p class="text-success"><small>This AR experience uses an optimized .mind tracking file for enhanced tracking performance.</small></p>' : ''}
           </div>
         </div>
       </div>
@@ -406,7 +417,7 @@ export function generateImageTrackingHtml(projectId: string, projectName: string
     
     <div id="ar-container">
       <a-scene 
-        mindar-image="imageTargetSrc: ${targetImageUrl}; autoStart: true; uiLoading: false; uiScanning: false;" 
+        mindar-image="imageTargetSrc: ${trackingSrc}; autoStart: true; uiLoading: false; uiScanning: false;" 
         embedded 
         color-space="sRGB" 
         renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true" 

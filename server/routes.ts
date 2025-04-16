@@ -588,7 +588,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           project.name, 
           project.targetImageUrl, 
           project.modelUrl, 
-          project.contentType
+          project.contentType,
+          project.mindFileUrl || undefined
         );
       } else if (project.type === 'markerless') {
         html = generateMarkerlessHtml(
@@ -639,9 +640,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[API:GenerateMindFile] .mind file generated successfully: ${mindFileResult.mindFileUrl}`);
       
+      // Update the project with the mind file URL
+      await storage.updateProject(project.id, {
+        mindFileUrl: mindFileResult.mindFileUrl
+      });
+      
       res.status(200).json(mindFileResult);
     } catch (error) {
       console.error("[API:GenerateMindFile] Error generating .mind file:", error);
+      handleApiError(error, res);
+    }
+  });
+  
+  // Generate .mind file from a target image URL (for new projects)
+  app.post("/api/generate-mind-file-from-image", isAuthenticated, async (req, res) => {
+    try {
+      const { targetImageUrl } = req.body;
+      
+      if (!targetImageUrl) {
+        return res.status(400).json({ 
+          message: "Missing target image URL",
+          details: "A target image URL is required to generate a .mind file"
+        });
+      }
+      
+      console.log(`[API:GenerateMindFileFromImage] Generating .mind file for image: ${targetImageUrl}`);
+      
+      // Download the target image from Wasabi
+      const targetImageKey = getKeyFromUrl(targetImageUrl);
+      const imageBuffer = await downloadFile(targetImageKey);
+      
+      // Generate a temporary ID for the mind file
+      const tempId = `temp-${Date.now()}`;
+      
+      // Generate a proper .mind file
+      const mindFileResult = await generateMindFile(imageBuffer, tempId);
+      
+      console.log(`[API:GenerateMindFileFromImage] .mind file generated successfully: ${mindFileResult.mindFileUrl}`);
+      
+      res.status(200).json(mindFileResult);
+    } catch (error) {
+      console.error("[API:GenerateMindFileFromImage] Error generating .mind file:", error);
       handleApiError(error, res);
     }
   });
