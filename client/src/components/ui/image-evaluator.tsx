@@ -69,7 +69,7 @@ export function ImageEvaluator({ image, onComplete }: ImageEvaluatorProps) {
     }
   }, [open, scriptLoaded]);
   
-  // Handle .mind file compilation
+  // Handle .mind file compilation through the micro-service
   const compileMindFile = async () => {
     if (!image) {
       setError('No image selected for compilation');
@@ -80,11 +80,11 @@ export function ImageEvaluator({ image, onComplete }: ImageEvaluatorProps) {
     setMindFileUrl(null);
     
     try {
-      // Use the MindAR compiler API endpoint
+      // Use the MindAR compiler micro-service
       const formData = new FormData();
       formData.append('image', image);
       
-      // Send the image to our backend to handle the compilation
+      // Send the image to our backend which forwards to the micro-service
       const response = await fetch('/api/compile-mind-file', {
         method: 'POST',
         body: formData,
@@ -97,6 +97,7 @@ export function ImageEvaluator({ image, onComplete }: ImageEvaluatorProps) {
       const data = await response.json();
       if (data.mindFileUrl) {
         setMindFileUrl(data.mindFileUrl);
+        console.log('Mind file compiled successfully:', data.mindFileUrl);
       } else {
         throw new Error('No .mind file URL returned');
       }

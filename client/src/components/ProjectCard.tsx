@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Project, ProjectAnalytics } from "@shared/schema";
-import { Eye, Share2, Trash, BarChart2 } from "lucide-react";
+import { Eye, Share2, Trash, BarChart2, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
@@ -28,6 +28,11 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
   const handlePreview = () => {
     navigate(`/view/${project.id}`);
+  };
+  
+  const handleARExperience = () => {
+    // Chuyển hướng đến trang AR experience của project này
+    navigate(`/project-ar/${project.id}`);
   };
 
   const handleShare = async () => {
@@ -164,6 +169,13 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
               <Eye className="mr-1.5 h-4 w-4" />
               <span className="hidden sm:inline">Preview</span>
             </Button>
+            {project.targetMindFile && (
+              <Button variant="outline" size="sm" onClick={handleARExperience}
+                className="transition-colors hover:bg-primary hover:text-white">
+                <Smartphone className="mr-1.5 h-4 w-4" />
+                <span className="hidden sm:inline">AR Mode</span>
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleShare}
               className="transition-colors hover:bg-primary hover:text-white">
               <Share2 className="mr-1.5 h-4 w-4" />

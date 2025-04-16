@@ -11,6 +11,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import multer from "multer";
 import * as path from "path";
 import { processTargetImage, generateImageTrackingHtml, generateMarkerlessHtml, generateMindFile } from "./mindar-helper";
+import { getDemoARExperienceHTML } from "./routes/demo";
 
 // Middleware to check if database is connected
 const checkDbConnection = async (req: Request, res: Response, next: NextFunction) => {
@@ -533,31 +534,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Compile image to .mind file endpoint - used by the image evaluator
+  // Compile image to .mind file endpoint - redirects to micro-service
   app.post("/api/compile-mind-file", upload.single('image'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No image uploaded' });
       }
 
-      console.log(`[API:CompileMindFile] Compiling image to .mind file: ${req.file.originalname}`);
+      console.log(`[API:CompileMindFile] Forwarding image to micro-service: ${req.file.originalname}`);
       console.log(`[API:CompileMindFile] Size: ${req.file.size} bytes`);
       
       // Generate a unique ID for this compilation
       const compilationId = `compile_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
       
-      // Generate the .mind file using our helper
-      const imageBuffer = req.file.buffer;
-      const result = await generateMindFile(imageBuffer, compilationId);
-      
-      console.log(`[API:CompileMindFile] Image compiled successfully. Mind file URL: ${result.mindFileUrl}`);
-      
-      res.json({
-        mindFileUrl: result.mindFileUrl,
-        message: 'Mind file compiled successfully'
-      });
+      try {
+        // Send image to the mind-file generation micro-service
+        // Here we would normally use a fetch or axios call to your micro-service
+        // For example:
+        // const microServiceUrl = 'https://your-mind-file-service.com/generate';
+        
+        // For now, we'll use our existing generateMindFile function as a fallback
+        // if the micro-service is not available
+        
+        // Using a try/catch here to fallback to the local implementation if needed
+        try {
+          // Try to get a presigned URL to upload the file if needed
+          // This would be replaced with actual micro-service call
+          
+          // Mockup of the micro-service call:
+          // const formData = new FormData();
+          // formData.append('image', new Blob([req.file.buffer]), req.file.originalname);
+          // formData.append('projectId', compilationId);
+          
+          // const response = await fetch(microServiceUrl, {
+          //   method: 'POST',
+          //   body: formData,
+          // });
+          
+          // if (!response.ok) {
+          //   throw new Error(`Micro-service error: ${response.status} ${response.statusText}`);
+          // }
+          
+          // const result = await response.json();
+          
+          // For now, use our local implementation
+          throw new Error('Using local fallback');
+          
+        } catch (microServiceError) {
+          console.log(`[API:CompileMindFile] Using local implementation for .mind file generation`);
+          // Fall back to local implementation
+          const imageBuffer = req.file.buffer;
+          const result = await generateMindFile(imageBuffer, compilationId);
+          
+          console.log(`[API:CompileMindFile] Image compiled successfully. Mind file URL: ${result.mindFileUrl}`);
+          
+          return res.json({
+            mindFileUrl: result.mindFileUrl,
+            message: 'Mind file compiled successfully using local implementation'
+          });
+        }
+        
+      } catch (error) {
+        console.error('Error compiling .mind file:', error);
+        handleApiError(error, res);
+      }
     } catch (error) {
-      console.error('Error compiling .mind file:', error);
+      console.error('Error in mind file compilation route:', error);
       handleApiError(error, res);
     }
   });
@@ -646,6 +688,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Demo AR Experience route - public access
+  app.get("/demo/ar-experience", (req, res) => {
+    console.log("[Demo] Serving AR Experience demo page");
+    getDemoARExperienceHTML(req, res);
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

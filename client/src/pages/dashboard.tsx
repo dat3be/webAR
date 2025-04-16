@@ -4,9 +4,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { ProjectCard } from "@/components/ProjectCard";
+import { ARDemoButton } from "@/components/ARDemoButton";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import type { Project } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,7 +70,20 @@ export default function Dashboard() {
       <main className="flex-1 overflow-auto">
         <div className="py-6">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-            <h1 className="text-2xl font-semibold text-gray-900">My AR Projects</h1>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <h1 className="text-2xl font-semibold text-gray-900">My AR Projects</h1>
+              
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100 shadow-sm w-full md:w-auto">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="h-5 w-5 text-blue-500" />
+                  <h3 className="font-medium text-blue-900">Demo AR Experience</h3>
+                </div>
+                <p className="text-sm text-blue-700 mb-3">
+                  Trải nghiệm AR demo không cần đăng nhập. Hoàn hảo cho việc chia sẻ và kiểm thử.
+                </p>
+                <ARDemoButton />
+              </div>
+            </div>
           </div>
 
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">

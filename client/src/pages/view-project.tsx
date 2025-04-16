@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import * as ReactDOM from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, X, RotateCcw, Camera, Move3d, ZoomIn, ZoomOut, 
-  RefreshCw, Maximize2, Info, Share2, Check, Download
+  RefreshCw, Maximize2, Info, Share2, Check, Download, Smartphone
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { Project } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MindFileGenerator } from "@/components/MindFileGenerator";
+import { MindARViewer } from "@/components/MindARViewer";
 import { 
   Dialog,
   DialogContent,
@@ -19,6 +21,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+
+
 
 // Define the interface for mindar and THREE to avoid typescript errors
 declare global {
@@ -45,6 +49,7 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
   const [showTutorial, setShowTutorial] = useState(true);
   const [showShareSuccess, setShowShareSuccess] = useState(false);
   const [showMindFileDialog, setShowMindFileDialog] = useState(false);
+  const [showARModeToast, setShowARModeToast] = useState(false);
   const isMobile = useIsMobile();
   const [modelOptions, setModelOptions] = useState({
     rotation: 0,
@@ -173,33 +178,30 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
       if (sceneRef.current) {
         sceneRef.current.innerHTML = "";
         
-        // Create iframe to load server-generated AR HTML
-        const iframe = document.createElement('iframe');
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.border = 'none';
-        iframe.allow = "camera; microphone; accelerometer; gyroscope; magnetometer; xr-spatial-tracking";
-        iframe.referrerPolicy = "no-referrer";
-        iframe.src = `/api/generate-ar-html/${project.id}`;
-        
-        // Add a loading overlay until iframe loads
-        const loadingOverlay = document.createElement('div');
-        loadingOverlay.className = 'absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center text-white';
-        loadingOverlay.innerHTML = `
-          <div class="animate-spin h-10 w-10 border-t-2 border-l-2 border-white rounded-full mb-4"></div>
-          <h3 class="text-lg font-medium mb-2">Loading AR Experience</h3>
-          <p class="text-sm text-gray-300">Please wait while we prepare your AR experience...</p>
-          <p class="text-sm text-gray-300 mt-2">You'll need to allow camera access when prompted</p>
-        `;
-        
-        sceneRef.current.appendChild(iframe);
-        sceneRef.current.appendChild(loadingOverlay);
-        
-        // Remove loading overlay when iframe loads
-        iframe.onload = () => {
-          loadingOverlay.remove();
+        // Use the direct MindARViewer component for image tracking projects
+        if (project.type === "image-tracking" && project.targetMindFile) {
+          // Clear and prepare container
+          const arContainer = document.createElement('div');
+          arContainer.className = 'w-full h-full';
+          sceneRef.current.appendChild(arContainer);
+          
+          // Create React component with MindARViewer
+          const root = ReactDOM.createRoot(arContainer);
+          root.render(
+            <MindARViewer 
+              mindFileUrl={project.targetMindFile}
+              modelUrl={project.modelUrl || ''}
+              contentType={project.contentType as 'video' | '3d-model'}
+              onTargetFound={() => {
+                setTargetFound(true);
+                setShowControls(true);
+              }}
+              onTargetLost={() => setTargetFound(false)}
+            />
+          );
+          
           setIsLoading(false);
-          setStatus("AR experience loaded");
+          setStatus("AR experience loaded using MindAR");
           
           // Auto-enter fullscreen on mobile
           if (isMobile && document.documentElement.requestFullscreen) {
@@ -209,23 +211,62 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
               console.warn("Failed to enter fullscreen:", e);
             }
           }
+        } else {
+          // Fallback to iframe method for other project types or if .mind file not available
+          // Create iframe to load server-generated AR HTML
+          const iframe = document.createElement('iframe');
+          iframe.style.width = '100%';
+          iframe.style.height = '100%';
+          iframe.style.border = 'none';
+          iframe.allow = "camera; microphone; accelerometer; gyroscope; magnetometer; xr-spatial-tracking";
+          iframe.referrerPolicy = "no-referrer";
+          iframe.src = `/api/generate-ar-html/${project.id}`;
           
-          setTargetFound(false);
-          setShowControls(true);
-        };
-        
-        // Handle iframe load errors
-        iframe.onerror = () => {
-          loadingOverlay.remove();
-          setIsLoading(false);
-          setStatus("Failed to load AR experience");
+          // Add a loading overlay until iframe loads
+          const loadingOverlay = document.createElement('div');
+          loadingOverlay.className = 'absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center text-white';
+          loadingOverlay.innerHTML = `
+            <div class="animate-spin h-10 w-10 border-t-2 border-l-2 border-white rounded-full mb-4"></div>
+            <h3 class="text-lg font-medium mb-2">Loading AR Experience</h3>
+            <p class="text-sm text-gray-300">Please wait while we prepare your AR experience...</p>
+            <p class="text-sm text-gray-300 mt-2">You'll need to allow camera access when prompted</p>
+          `;
           
-          toast({
-            title: "Error",
-            description: "Failed to load AR experience. Please try again.",
-            variant: "destructive",
-          });
-        };
+          sceneRef.current.appendChild(iframe);
+          sceneRef.current.appendChild(loadingOverlay);
+          
+          // Remove loading overlay when iframe loads
+          iframe.onload = () => {
+            loadingOverlay.remove();
+            setIsLoading(false);
+            setStatus("AR experience loaded");
+            
+            // Auto-enter fullscreen on mobile
+            if (isMobile && document.documentElement.requestFullscreen) {
+              try {
+                document.documentElement.requestFullscreen();
+              } catch (e) {
+                console.warn("Failed to enter fullscreen:", e);
+              }
+            }
+            
+            setTargetFound(false);
+            setShowControls(true);
+          };
+          
+          // Handle iframe load errors
+          iframe.onerror = () => {
+            loadingOverlay.remove();
+            setIsLoading(false);
+            setStatus("Failed to load AR experience");
+            
+            toast({
+              title: "Error",
+              description: "Failed to load AR experience. Please try again.",
+              variant: "destructive",
+            });
+          };
+        }
       }
     } catch (error) {
       console.error("Error setting up AR:", error);
@@ -553,6 +594,18 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
       document.documentElement.requestFullscreen();
     }
   };
+  
+  const handleARMode = () => {
+    // Hiển thị toast và sau đó chuyển hướng đến trang AR experience
+    if (project?.id) {
+      setShowARModeToast(true);
+      // Chuyển hướng sau 1.5 giây
+      setTimeout(() => {
+        setShowARModeToast(false);
+        navigate(`/project-ar/${project.id}`);
+      }, 1500);
+    }
+  };
 
   const rotateModel = (degrees: number) => {
     setModelOptions(prev => ({
@@ -621,31 +674,55 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
                 Position your face in the center of the screen. The AR content will appear in front of your face. You can rotate your head to see it from different angles.
               </p>
             )}
-            <Button 
-              className="mt-4 w-full"
-              onClick={() => setShowTutorial(false)}
-            >
-              Got it
-            </Button>
+            <div className="mt-4 flex flex-col space-y-2">
+              <Button 
+                className="w-full"
+                onClick={() => setShowTutorial(false)}
+              >
+                Got it
+              </Button>
+              
+              {project?.targetMindFile && (
+                <Button
+                  variant="outline"
+                  className="w-full flex items-center justify-center"
+                  onClick={handleARMode}
+                >
+                  <Smartphone className="mr-2 h-4 w-4" />
+                  Open in AR Mode
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* UI Controls */}
       <div className="absolute bottom-4 left-0 right-0 flex justify-center z-10">
-        <div className={`bg-black bg-opacity-50 backdrop-blur-md rounded-full px-4 py-2 flex items-center shadow-lg transition-all duration-300 ${targetFound ? 'opacity-100' : 'opacity-70'}`}>
-          <Button variant="ghost" size="icon" className="rounded-full text-white" onClick={handleRefresh}>
-            <RotateCcw className="h-5 w-5" />
+        <div className={`bg-black/60 backdrop-blur-md rounded-full px-5 py-2.5 flex items-center shadow-xl border border-white/10 transition-all duration-300 animate-fade-in ${targetFound ? 'opacity-100' : 'opacity-80'}`}>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="rounded-full text-white hover:bg-white/20 mr-1"
+            onClick={handleRefresh}
+          >
+            <RotateCcw className="h-4 w-4" />
           </Button>
           {!targetFound ? (
-            <span className="mx-2 text-white font-medium text-sm animate-pulse">
-              {project?.type === "image-tracking" ? "Scanning for image..." : "Detecting face..."}
-            </span>
+            <div className="mx-2 flex items-center">
+              <div className="w-2 h-2 bg-amber-400 rounded-full mr-2 animate-pulse"></div>
+              <span className="text-white font-medium text-sm">
+                {project?.type === "image-tracking" ? "Đang quét hình ảnh..." : "Đang phát hiện khuôn mặt..."}
+              </span>
+            </div>
           ) : (
-            <span className="mx-2 text-white font-medium text-sm flex items-center">
-              <Check className="h-4 w-4 mr-1 text-green-400" />
-              {project?.type === "image-tracking" ? "Target found" : "Face detected"}
-            </span>
+            <div className="mx-2 flex items-center">
+              <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
+              <span className="text-white font-medium text-sm flex items-center">
+                <Check className="h-4 w-4 mr-1 text-green-400" />
+                {project?.type === "image-tracking" ? "Đã tìm thấy hình ảnh" : "Đã phát hiện khuôn mặt"}
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -655,7 +732,7 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
         <Button 
           variant="outline" 
           size="icon" 
-          className="rounded-full bg-black bg-opacity-50 backdrop-blur-md border-none hover:bg-black hover:bg-opacity-70 text-white"
+          className="rounded-full bg-black/50 backdrop-blur-md border-white/10 hover:bg-black/70 text-white shadow-lg animate-fade-in"
           onClick={handleBack}
         >
           <X className="h-5 w-5" />
@@ -665,10 +742,11 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
           <Button 
             variant="outline" 
             size="icon" 
-            className="rounded-full bg-black bg-opacity-50 backdrop-blur-md border-none hover:bg-black hover:bg-opacity-70 text-white"
+            className="rounded-full bg-black/50 backdrop-blur-md border-white/10 hover:bg-black/70 text-white shadow-lg animate-fade-in animation-delay-300"
             onClick={handleShare}
+            title="Chia sẻ"
           >
-            <Share2 className="h-5 w-5" />
+            <Share2 className="h-4 w-4" />
           </Button>
           
           {/* Add Mind File Generator button only for image-tracking projects */}
@@ -676,71 +754,108 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
             <Button 
               variant="outline" 
               size="icon" 
-              className="rounded-full bg-black bg-opacity-50 backdrop-blur-md border-none hover:bg-black hover:bg-opacity-70 text-white"
+              className="rounded-full bg-black/50 backdrop-blur-md border-white/10 hover:bg-black/70 text-white shadow-lg animate-fade-in animation-delay-300"
               onClick={() => setShowMindFileDialog(true)}
+              title="Tạo mind file"
             >
-              <Download className="h-5 w-5" />
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
+          
+          {/* AR Mode button for projects with mind file */}
+          {project?.targetMindFile && (
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="rounded-full bg-gradient-to-br from-indigo-500/70 to-purple-500/70 backdrop-blur-md border-white/10 hover:from-indigo-500/90 hover:to-purple-500/90 text-white shadow-lg animate-fade-in animation-delay-500"
+              onClick={handleARMode}
+              title="Chế độ AR"
+            >
+              <Smartphone className="h-4 w-4" />
             </Button>
           )}
           
           <Button 
             variant="outline" 
             size="icon" 
-            className="rounded-full bg-black bg-opacity-50 backdrop-blur-md border-none hover:bg-black hover:bg-opacity-70 text-white"
+            className="rounded-full bg-black/50 backdrop-blur-md border-white/10 hover:bg-black/70 text-white shadow-lg animate-fade-in animation-delay-500"
             onClick={handleFullscreen}
+            title="Toàn màn hình"
           >
-            <Maximize2 className="h-5 w-5" />
+            <Maximize2 className="h-4 w-4" />
           </Button>
           
           <Button 
             variant="outline"
             size="icon" 
-            className="rounded-full bg-black bg-opacity-50 backdrop-blur-md border-none hover:bg-black hover:bg-opacity-70 text-white"
+            className="rounded-full bg-black/50 backdrop-blur-md border-white/10 hover:bg-black/70 text-white shadow-lg animate-fade-in animation-delay-700"
             onClick={() => setShowTutorial(true)}
+            title="Hướng dẫn"
           >
-            <Info className="h-5 w-5" />
+            <Info className="h-4 w-4" />
           </Button>
         </div>
       </div>
       
       {/* Share success toast */}
       {showShareSuccess && (
-        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 backdrop-blur-md text-white px-4 py-2 rounded-lg flex items-center z-50">
-          <Check className="h-4 w-4 mr-2 text-green-400" />
-          <span className="text-sm">Link copied to clipboard</span>
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-green-500/80 backdrop-blur-md text-white px-5 py-3 rounded-xl flex items-center z-50 shadow-xl">
+          <div className="mr-3 bg-white/20 w-8 h-8 rounded-full flex items-center justify-center">
+            <Check className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <div className="text-sm font-medium">Đã sao chép liên kết</div>
+            <div className="text-xs text-white/80 mt-0.5">Chia sẻ với bạn bè của bạn</div>
+          </div>
+        </div>
+      )}
+      
+      {/* AR Mode toast */}
+      {showARModeToast && (
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-indigo-500/80 backdrop-blur-md text-white px-5 py-3 rounded-xl flex items-center z-50 shadow-xl animate-pulse">
+          <div className="mr-3 bg-white/20 w-8 h-8 rounded-full flex items-center justify-center">
+            <Smartphone className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <div className="text-sm font-medium">Đang mở chế độ AR...</div>
+            <div className="text-xs text-white/80 mt-0.5">Chuyển sang trải nghiệm đầy đủ</div>
+          </div>
         </div>
       )}
 
       {/* Model Controls (only show when content is 3D model and target is found) */}
       {project?.contentType === "3d-model" && targetFound && showControls && (
-        <div className="absolute bottom-16 right-4 flex flex-col gap-2 z-20">
-          <div className="bg-black bg-opacity-50 backdrop-blur-md rounded-lg p-2 shadow-lg">
-            <div className="flex flex-col gap-2">
+        <div className="absolute bottom-16 right-4 flex flex-col gap-2.5 z-20">
+          <div className="bg-black/40 backdrop-blur-md rounded-2xl p-3 shadow-xl border border-white/10">
+            <div className="flex flex-col gap-3">
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="rounded-full text-white hover:bg-white/20"
+                className="rounded-full bg-gradient-to-br from-purple-500/80 to-indigo-600/80 text-white hover:shadow-lg transition-all duration-300 hover:scale-105"
                 onClick={() => rotateModel(45)}
+                title="Xoay mô hình"
               >
-                <RefreshCw className="h-5 w-5" />
+                <RefreshCw className="h-4 w-4" />
               </Button>
               
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="rounded-full text-white hover:bg-white/20"
+                className="rounded-full bg-gradient-to-br from-blue-500/80 to-cyan-600/80 text-white hover:shadow-lg transition-all duration-300 hover:scale-105"
                 onClick={() => scaleModel(0.1)}
+                title="Phóng to"
               >
-                <ZoomIn className="h-5 w-5" />
+                <ZoomIn className="h-4 w-4" />
               </Button>
               
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="rounded-full text-white hover:bg-white/20"
+                className="rounded-full bg-gradient-to-br from-blue-600/80 to-blue-500/80 text-white hover:shadow-lg transition-all duration-300 hover:scale-105"
                 onClick={() => scaleModel(-0.1)}
+                title="Thu nhỏ"
               >
-                <ZoomOut className="h-5 w-5" />
+                <ZoomOut className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -751,9 +866,9 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
       <Dialog open={showMindFileDialog} onOpenChange={setShowMindFileDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Generate .mind File</DialogTitle>
-            <DialogDescription>
-              Create a compiled .mind file for use with the MindAR library in custom AR applications.
+            <DialogTitle className="text-xl font-semibold bg-gradient-to-br from-indigo-500 to-purple-600 bg-clip-text text-transparent">Tạo File .mind</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Tạo file .mind đã biên dịch để sử dụng với thư viện MindAR trong các ứng dụng AR tùy chỉnh.
             </DialogDescription>
           </DialogHeader>
           {project && (

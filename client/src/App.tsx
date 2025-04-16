@@ -5,6 +5,8 @@ import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
 import CreateProject from "@/pages/create-project";
 import ViewProject from "@/pages/view-project";
+import ARDemo from "@/pages/ar-demo";
+import ProjectARView from "@/pages/project-ar-view";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import { ProtectedRoute } from "@/lib/protected-route";
@@ -44,6 +46,12 @@ function App() {
         <ProtectedRoute path="/create-project" component={CreateProjectWrapper} />
         <Route path="/view/:projectId">
           {(params) => <ViewProject projectId={params.projectId} />}
+        </Route>
+        <Route path="/project-ar/:projectId">
+          {(params) => <ProjectARView projectId={params.projectId} />}
+        </Route>
+        <Route path="/demo/ar">
+          <ARDemo />
         </Route>
         <Route>
           <NotFound />
