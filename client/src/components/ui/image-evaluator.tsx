@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Loader2, Search, AlertTriangle, Check, Info, Cpu, Download } from "lucide-react";
+import { Loader2, Search, AlertTriangle, Check, Info, Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -386,6 +386,29 @@ export function ImageEvaluator({ image, onComplete }: ImageEvaluatorProps) {
               </div>
             ) : (
               <div className="space-y-6">
+                {isCompiling ? (
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                    <p className="text-sm text-gray-500">Compiling .mind file...</p>
+                    <p className="text-xs text-gray-400 mt-2">This process may take a minute</p>
+                  </div>
+                ) : mindFileUrl ? (
+                  <div className="flex flex-col items-center justify-center py-4 space-y-4 border rounded-md bg-green-50 p-4">
+                    <Check className="h-8 w-8 text-green-500" />
+                    <div className="text-center">
+                      <h4 className="font-medium text-green-600">Compilation Successful!</h4>
+                      <p className="text-sm text-gray-600 mb-3">Your .mind file is ready to download</p>
+                      <Button
+                        variant="outline"
+                        className="flex items-center gap-2"
+                        onClick={() => window.open(mindFileUrl, '_blank')}
+                      >
+                        <Download className="h-4 w-4" />
+                        Download .mind File
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                   <div className="w-full max-w-[160px] h-[160px] overflow-hidden rounded-md border border-gray-200 shadow-sm">
                     <img 
@@ -466,7 +489,7 @@ export function ImageEvaluator({ image, onComplete }: ImageEvaluatorProps) {
                               onClick={compileMindFile}
                               disabled={evaluationResult.score < 40}
                             >
-                              <Cpu className="h-4 w-4 mr-1" />
+                              <Download className="h-4 w-4 mr-1" />
                               Compile to .mind File
                             </Button>
                           )}
