@@ -18,6 +18,7 @@ export function MindFileGenerator({ projectId, targetImageUrl, className, onEval
   const [isComplete, setIsComplete] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scaledImages, setScaledImages] = useState<string[]>([]);
   const { toast } = useToast();
 
   // Evaluate target image and generate .mind file
@@ -47,6 +48,10 @@ export function MindFileGenerator({ projectId, targetImageUrl, className, onEval
 
       const data = await response.json();
       setDownloadUrl(data.mindFileUrl);
+      // Nếu có scaledImageUrls từ API, set chúng vào state
+      if (data.scaledImageUrls && Array.isArray(data.scaledImageUrls)) {
+        setScaledImages(data.scaledImageUrls);
+      }
       setIsComplete(true);
       
       // Update the project with the mind file URL
@@ -145,6 +150,29 @@ export function MindFileGenerator({ projectId, targetImageUrl, className, onEval
           )}
         </div>
       </div>
+      
+      {/* Hiển thị các hình ảnh được scale nếu có */}
+      {isComplete && scaledImages.length > 0 && (
+        <div className="mb-6">
+          <h4 className="text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+            Kết quả đánh giá (Hình ảnh được scale)
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {scaledImages.map((img, index) => (
+              <div key={index} className="relative aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
+                <img 
+                  src={img} 
+                  alt={`Scaled image ${index+1}`} 
+                  className="w-full h-full object-contain bg-slate-50 dark:bg-slate-900"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs py-1 px-2 text-center">
+                  Scale {index+1}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="flex justify-between items-center">
         <Button 

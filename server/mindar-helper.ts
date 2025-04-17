@@ -37,6 +37,61 @@ async function createPreviewImage(imageBuffer: Buffer, previewPath: string): Pro
 }
 
 /**
+ * Generate scaled images for visualization
+ * @param imageBuffer Original image buffer
+ * @param projectId Project ID for file naming
+ * @returns Array of URLs to scaled images
+ */
+async function generateScaledImages(imageBuffer: Buffer, projectId: string): Promise<string[]> {
+  try {
+    console.log("[MindAR] Generating scaled images for visualization");
+    const imageUrls: string[] = [];
+    
+    // Extract metadata to get original dimensions
+    const metadata = await sharp(imageBuffer).metadata();
+    const minDimension = Math.min(metadata.width || 0, metadata.height || 0);
+    
+    // Generate the same scales as used in the mind compiler
+    const scaleList = [
+      256.0 / minDimension,  // ~256x256 px
+      128.0 / minDimension   // ~128x128 px
+    ];
+    
+    // Create and upload each scaled image
+    for (let i = 0; i < scaleList.length; i++) {
+      const scale = scaleList[i];
+      const scaledWidth = Math.round((metadata.width || 0) * scale);
+      const scaledHeight = Math.round((metadata.height || 0) * scale);
+      
+      console.log(`[MindAR] Creating scaled image ${i+1} (${scaledWidth}x${scaledHeight})`);
+      
+      // Resize the image
+      const scaledBuffer = await sharp(imageBuffer)
+        .resize(scaledWidth, scaledHeight)
+        .toBuffer();
+      
+      // Upload to storage
+      const scaledFileName = `project_${projectId}_scaled_${i+1}_${Date.now()}.jpg`;
+      const scaledImageUrl = await uploadFile(
+        scaledBuffer,
+        scaledFileName,
+        'image/jpeg',
+        'scaled-images'
+      );
+      
+      imageUrls.push(scaledImageUrl);
+    }
+    
+    console.log(`[MindAR] Successfully created ${imageUrls.length} scaled images`);
+    return imageUrls;
+  } catch (error) {
+    console.error('[MindAR] Error generating scaled images:', error);
+    // Return empty array in case of error to avoid breaking the main flow
+    return [];
+  }
+}
+
+/**
  * Generate a specific .mind file for a target image
  * 
  * Uses MindAR compiler library to generate a .mind file
@@ -47,6 +102,7 @@ async function createPreviewImage(imageBuffer: Buffer, previewPath: string): Pro
  */
 export async function generateMindFile(imageBuffer: Buffer, projectId: string): Promise<{
   mindFileUrl: string;
+  scaledImageUrls?: string[];
 }> {
   try {
     // Create temp file paths
@@ -96,9 +152,13 @@ export async function generateMindFile(imageBuffer: Buffer, projectId: string): 
     fs.unlinkSync(tempImagePath);
     fs.unlinkSync(tempMindFilePath);
     
-    // Return public URL for download
+    // Tạo các hình ảnh đã scale và lưu vào Wasabi
+    const scaledImageUrls = await generateScaledImages(imageBuffer, projectId);
+    
+    // Return public URL for download along with scaled image URLs
     return {
-      mindFileUrl: mindFileUrl
+      mindFileUrl: mindFileUrl,
+      scaledImageUrls: scaledImageUrls
     };
   } catch (error) {
     console.error('Error generating .mind file:', error);
