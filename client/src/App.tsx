@@ -7,6 +7,7 @@ import CreateProject from "@/pages/create-project";
 import ViewProject from "@/pages/view-project";
 import ARDemo from "@/pages/ar-demo";
 import ProjectARView from "@/pages/project-ar-view";
+import DirectARView from "@/pages/direct-ar-view";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import { ProtectedRoute } from "@/lib/protected-route";
@@ -49,6 +50,9 @@ function App() {
         </Route>
         <Route path="/project-ar/:projectId">
           {(params) => <ProjectARView projectId={params.projectId} />}
+        </Route>
+        <Route path="/direct-ar/:projectId">
+          {(params) => <DirectARView projectId={params.projectId} />}
         </Route>
         <Route path="/demo/ar">
           <ARDemo />
