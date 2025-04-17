@@ -12,7 +12,7 @@ import { ModelUpload } from "@/components/ui/model-upload";
 import { ImageTargetUpload } from "@/components/ui/image-target-upload";
 import { ImageEvaluator } from "@/components/ui/image-evaluator";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { uploadFile } from "@/lib/fileUpload";
 import { Loader2, Image, Box, Film, Square } from "lucide-react";
 
@@ -139,6 +139,9 @@ export default function CreateProject() {
         variant: "default"
       });
 
+      // Force invalidate the projects query to ensure immediate data update
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      
       // Redirect to dashboard with refresh flag to force data reload
       navigate("/dashboard?refresh=true");
     } catch (error: any) {

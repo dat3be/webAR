@@ -7,6 +7,8 @@ import {
   Loader2, ArrowLeft, Share2, Edit, Check, Info, Download, Smartphone,
   ExternalLink, ScanFace
 } from "lucide-react";
+import { ModelViewer } from "@/components/ModelViewer";
+import React from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Project } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -145,21 +147,9 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
     
     // Debug logs
     console.log('[DEBUG] ViewAR: Current project data:', project);
-    console.log('[DEBUG] ViewAR: targetMindFile =', project.targetMindFile);
     
-    if (project.type === 'image-tracking' && !project.targetMindFile) {
-      console.log('[DEBUG] ViewAR: Missing targetMindFile, showing dialog');
-      
-      toast({
-        title: "Chưa có file .mind",
-        description: "Vui lòng đánh giá hình ảnh mục tiêu trước khi xem AR",
-        variant: "destructive",
-      });
-      setShowMindFileDialog(true);
-      return;
-    }
-    
-    console.log('[DEBUG] ViewAR: Navigating to AR experience');
+    // Điều hướng đến trải nghiệm AR tối giản
+    console.log('[DEBUG] ViewAR: Navigating to Minimal AR experience');
     navigate(`/project-ar/${project.id}`);
   };
   
@@ -303,36 +293,14 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
             
             {/* Actions */}
             <div className="flex flex-col space-y-4">
-              {project.targetMindFile && project.type === 'image-tracking' ? (
-                <>
-                  <Button 
-                    size="lg" 
-                    className="w-full gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-                    onClick={viewAR}
-                  >
-                    <Smartphone className="h-5 w-5" />
-                    <span>Trải nghiệm AR ngay</span>
-                  </Button>
-                  
-                  <Button 
-                    size="lg" 
-                    className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-md hover:shadow-lg transition-all duration-300"
-                    onClick={() => navigate(`/direct-ar/${project.id}`)}
-                  >
-                    <ExternalLink className="h-5 w-5" />
-                    <span>Mở AR trực tiếp (Phiên bản mới)</span>
-                  </Button>
-                </>
-              ) : (
-                <Button 
-                  size="lg" 
-                  className="w-full gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-                  onClick={viewAR}
-                >
-                  <ScanFace className="h-5 w-5" />
-                  <span>Trải nghiệm AR</span>
-                </Button>
-              )}
+              <Button 
+                size="lg" 
+                className="w-full gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                onClick={viewAR}
+              >
+                <Smartphone className="h-5 w-5" />
+                <span>Trải nghiệm AR ngay</span>
+              </Button>
               
               {project.targetMindFile && (
                 <Button
@@ -385,14 +353,13 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
                   <div className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
                     {project.modelUrl ? (
                       project.contentType === '3d-model' ? (
-                        <div className="flex flex-col items-center justify-center text-center p-4">
-                          <img 
-                            src="/assets/3d-model-placeholder.svg" 
-                            alt="3D Model" 
-                            className="w-24 h-24 mb-2 opacity-70"
+                        <div className="w-full h-full flex flex-col">
+                          <ModelViewer
+                            src={project.modelUrl}
+                            alt={`Mô hình 3D ${project.name}`}
+                            className="w-full h-64"
                           />
-                          <p className="text-sm font-medium">Mô hình 3D sẽ hiển thị trong AR</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
                             {project.modelUrl.split('/').pop()}
                           </p>
                         </div>

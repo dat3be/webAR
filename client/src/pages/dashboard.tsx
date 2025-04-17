@@ -25,7 +25,10 @@ export default function Dashboard() {
 
   // Check if we need to force refresh data (e.g., coming from project creation)
   useEffect(() => {
-    if (location.includes('refresh=true')) {
+    // Parse search params from URL
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.has('refresh') && searchParams.get('refresh') === 'true') {
+      console.log("Detected refresh=true, invalidating projects query");
       // Invalidate the projects query to force a refetch
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       // Clean up the URL by removing the refresh parameter
