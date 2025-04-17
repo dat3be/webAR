@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import sharp from 'sharp';
 import { uploadFile, getPublicUrl, getKeyFromUrl, downloadFile } from './wasabi';
+import MindARCompiler from './mindar-compiler/compiler';
 
 const TEMP_DIR = path.join(os.tmpdir(), 'mindar-temp');
 
@@ -58,101 +59,23 @@ export async function generateMindFile(imageBuffer: Buffer, projectId: string): 
     console.log(`[MindAR] Generating .mind file for project ${projectId}`);
     console.time("mind-file-generation");
     
-    // Extract image dimensions
+    // Extract image dimensions for logging
     const metadata = await sharp(imageBuffer).metadata();
-    const imageWidth = metadata.width || 512;
-    const imageHeight = metadata.height || 384;
+    console.log(`[MindAR] Image dimensions: ${metadata.width}x${metadata.height}`);
     
-    // Generate a .mind file structure based on the MindAR format
-    // This creates a valid .mind file format that contains the necessary basic data
+    // Initialize the MindAR compiler
+    const compiler = new MindARCompiler();
     
-    // 1. Create metadata header
-    const metaHeader = Buffer.from(JSON.stringify({
-      version: "1.1.0",
-      createdAt: new Date().toISOString(),
-      projectId: projectId,
-      targetCount: 1,
-      imageWidth,
-      imageHeight,
-      compiler: "mindar-js-1.2.2"
-    }));
+    // Compile the image target
+    console.log('[MindAR] Starting image compilation...');
+    await compiler.compileImageTargets([imageBuffer]);
+    console.log('[MindAR] Image compilation completed');
     
-    // 2. Generate tracking data (keypoints) based on image content
-    // Use a larger number of keypoints for better tracking
-    const numKeypoints = 200;
-    const keypointData = Buffer.alloc(numKeypoints * 8); // 4 bytes x, 4 bytes y
-    
-    // Generate keypoints based on image dimensions with better distribution
-    for (let i = 0; i < numKeypoints; i++) {
-      // We're creating a well-distributed set of points across the entire image
-      // This improves tracking stability compared to purely random points
-      const gridSize = Math.ceil(Math.sqrt(numKeypoints));
-      const gridX = Math.floor(i % gridSize);
-      const gridY = Math.floor(i / gridSize);
-      
-      // Add some randomness within each grid cell for natural distribution
-      const cellWidth = imageWidth / gridSize;
-      const cellHeight = imageHeight / gridSize;
-      
-      const x = Math.round(gridX * cellWidth + (Math.random() * 0.8 + 0.1) * cellWidth);
-      const y = Math.round(gridY * cellHeight + (Math.random() * 0.8 + 0.1) * cellHeight);
-      
-      keypointData.writeUInt32LE(Math.min(x, imageWidth - 1), i * 8);
-      keypointData.writeUInt32LE(Math.min(y, imageHeight - 1), i * 8 + 4);
-    }
-    
-    // 3. Generate feature descriptors (128-byte SIFT-like descriptors)
-    // These descriptors would normally be computed from the image, but we'll use
-    // random values that preserve some consistency for keypoints that are close together
-    const descriptorData = Buffer.alloc(numKeypoints * 128);
-    
-    for (let i = 0; i < numKeypoints; i++) {
-      // Get the keypoint location
-      const x = keypointData.readUInt32LE(i * 8);
-      const y = keypointData.readUInt32LE(i * 8 + 4);
-      
-      // Use the keypoint location to seed the descriptor values
-      // This creates more realistic descriptors compared to completely random ones
-      const descriptorOffset = i * 128;
-      for (let j = 0; j < 128; j++) {
-        // Generate descriptor values that have a pattern based on image coordinates
-        const value = Math.floor(
-          ((x * 13 + j * 7) % 256) * 0.3 + 
-          ((y * 7 + j * 13) % 256) * 0.3 + 
-          (Math.random() * 0.4 * 256)
-        ) % 256;
-        
-        descriptorData[descriptorOffset + j] = value;
-      }
-    }
-    
-    // 4. Create header size buffers
-    const headerSizeBuffer = Buffer.alloc(4);
-    headerSizeBuffer.writeUInt32LE(metaHeader.length);
-    
-    const keypointSizeBuffer = Buffer.alloc(4);
-    keypointSizeBuffer.writeUInt32LE(keypointData.length);
-    
-    const descriptorSizeBuffer = Buffer.alloc(4);
-    descriptorSizeBuffer.writeUInt32LE(descriptorData.length);
-    
-    // 5. Create identifier buffer
-    const identifier = Buffer.from("MINDAR");
-    
-    // 6. Combine all buffers to create a realistic .mind file format
-    const mindFileBuffer = Buffer.concat([
-      identifier,
-      headerSizeBuffer,
-      metaHeader,
-      keypointSizeBuffer,
-      keypointData,
-      descriptorSizeBuffer,
-      descriptorData
-    ]);
-    
+    // Export the compiled data as a buffer
+    const mindFileBuffer = await compiler.exportData();
     console.log(`[MindAR] Generated .mind file. Size: ${mindFileBuffer.length} bytes`);
     
-    // Write to temp file
+    // Write to temp file for backup
     fs.writeFileSync(tempMindFilePath, mindFileBuffer);
     
     // Upload the .mind file
@@ -210,43 +133,35 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
     console.log("Starting MindAR compilation for target image...");
     console.time("mind-compilation");
     
-    // Since we can't use the browser-based MindAR compiler directly in Node.js,
-    // we are simulating the compilation process here.
-    // In a production environment, you would use the MindAR compiler in a headless browser
-    // or implement the MindAR compiler's algorithm in Node.js.
-    
-    // For development purposes, we're still uploading the image directly
-    // and using it as the target source in the AR HTML
-    // In production, this should be replaced with actual .mind file compilation
-    
-    // Upload original image to use as the target source
+    // Upload original image to use as the target source and for reference
     const originalFileName = path.basename(tempImagePath);
     const targetImageUrl = await uploadFile(imageBuffer, originalFileName, 'image/jpeg', 'targets');
     
-    // Generate a placeholder .mind file - in production, this would be compiled using MindAR
-    // This simulates the compile step from the GitHub example:
-    // const compiler = new MINDAR.Compiler();
-    // const images = [loadedImage];
-    // const dataList = await compiler.compileImageTargets(images);
-    // const exportedBuffer = await compiler.exportData();
+    // Initialize the MindAR compiler
+    const compiler = new MindARCompiler();
     
-    // Create a minimal placeholder .mind file
-    // In production, this should be the actual compiled .mind file
-    const mindPlaceholder = Buffer.from(
-      JSON.stringify({
-        createdAt: new Date().toISOString(),
-        targetImage: originalFileName,
-        // This is a placeholder. In reality, the .mind file has a specific binary format
-        // with tracking and matching data
-      })
-    );
+    // Compile the image target
+    console.log('[MindAR] Starting image compilation...');
+    await compiler.compileImageTargets([imageBuffer]);
+    console.log('[MindAR] Image compilation completed');
     
-    fs.writeFileSync(tempMindFilePath, mindPlaceholder);
+    // Export the compiled data as a buffer
+    const mindFileBuffer = await compiler.exportData();
+    console.log(`[MindAR] Generated .mind file. Size: ${mindFileBuffer.length} bytes`);
+    
+    // Write to temp file for backup
+    fs.writeFileSync(tempMindFilePath, mindFileBuffer);
     
     // Upload the .mind file
-    const mindFileBuffer = fs.readFileSync(tempMindFilePath);
-    const mindFileName = path.basename(tempMindFilePath);
-    const mindFileUrl = await uploadFile(mindFileBuffer, mindFileName, 'application/octet-stream', 'mind-files');
+    const mindFileName = `target_${Date.now()}.mind`;
+    console.log(`[MindAR] Uploading .mind file: ${mindFileName}`);
+    
+    const mindFileUrl = await uploadFile(
+      mindFileBuffer, 
+      mindFileName, 
+      'application/octet-stream', 
+      'mind-files'
+    );
     
     // Upload preview image
     const previewBuffer = fs.readFileSync(tempPreviewPath);
@@ -254,7 +169,7 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
     const previewImageUrl = await uploadFile(previewBuffer, previewFileName, 'image/png', 'previews');
     
     console.timeEnd("mind-compilation");
-    console.log("MindAR compilation completed for target image.");
+    console.log("MindAR compilation completed for target image. Mind file URL:", mindFileUrl);
     
     // Clean up temporary files
     fs.unlinkSync(tempImagePath);
@@ -263,21 +178,19 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
     
     // Return public URLs
     return {
-      // In the current implementation, we're using the image URL directly
-      // In a production environment, you would use the compiled .mind file URL
-      mindFileUrl: targetImageUrl,
+      mindFileUrl: mindFileUrl,
       previewImageUrl: previewImageUrl,
     };
   } catch (error) {
     console.error('Error processing target image:', error);
-    throw new Error('Failed to process target image');
+    throw new Error('Failed to process target image: ' + (error instanceof Error ? error.message : String(error)));
   }
 }
 
 /**
  * Generate a WebAR HTML code that can be embedded for image tracking
  */
-export function generateImageTrackingHtml(projectId: string, projectName: string, targetImageUrl: string, modelUrl: string, contentType: 'video' | '3d-model'): string {
+export function generateImageTrackingHtml(projectId: string, projectName: string, targetImageUrl: string, mindFileUrl: string, modelUrl: string, contentType: 'video' | '3d-model'): string {
   const isVideo = contentType === 'video';
   
   return `
@@ -406,7 +319,7 @@ export function generateImageTrackingHtml(projectId: string, projectName: string
     
     <div id="ar-container">
       <a-scene 
-        mindar-image="imageTargetSrc: ${targetImageUrl}; autoStart: true; uiLoading: false; uiScanning: false;" 
+        mindar-image="imageTargetSrc: ${mindFileUrl}; autoStart: true; uiLoading: false; uiScanning: false;" 
         embedded 
         color-space="sRGB" 
         renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true" 
