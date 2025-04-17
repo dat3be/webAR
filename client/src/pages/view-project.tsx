@@ -117,12 +117,20 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
   };
 
   // Handle mind file generation completion
-  const handleMindFileGenerationComplete = () => {
+  const handleMindFileGenerationComplete = async () => {
+    console.log('[DEBUG] Mind file generation complete callback triggered');
+    
     // Close dialog
     setShowMindFileDialog(false);
     
     // Re-fetch project to get updated mindFile URL
-    refetch();
+    try {
+      console.log('[DEBUG] Refetching project data...');
+      await refetch();
+      console.log('[DEBUG] Project data refetched successfully');
+    } catch (error) {
+      console.error('[DEBUG] Failed to refetch project data:', error);
+    }
     
     toast({
       title: "Đánh giá hoàn tất!",
@@ -134,7 +142,13 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
   const viewAR = () => {
     if (!project) return;
     
+    // Debug logs
+    console.log('[DEBUG] ViewAR: Current project data:', project);
+    console.log('[DEBUG] ViewAR: targetMindFile =', project.targetMindFile);
+    
     if (project.type === 'image-tracking' && !project.targetMindFile) {
+      console.log('[DEBUG] ViewAR: Missing targetMindFile, showing dialog');
+      
       toast({
         title: "Chưa có file .mind",
         description: "Vui lòng đánh giá hình ảnh mục tiêu trước khi xem AR",
@@ -144,6 +158,7 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
       return;
     }
     
+    console.log('[DEBUG] ViewAR: Navigating to AR experience');
     navigate(`/project-ar/${project.id}`);
   };
   

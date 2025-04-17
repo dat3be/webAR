@@ -47,6 +47,8 @@ export function MindFileGenerator({ projectId, targetImageUrl, className, onEval
       }
 
       const data = await response.json();
+      console.log('[DEBUG] Generate mind file API response:', data);
+      
       setDownloadUrl(data.mindFileUrl);
       // Nếu có scaledImageUrls từ API, set chúng vào state
       if (data.scaledImageUrls && Array.isArray(data.scaledImageUrls)) {
@@ -54,21 +56,51 @@ export function MindFileGenerator({ projectId, targetImageUrl, className, onEval
       }
       setIsComplete(true);
       
-      // Update the project with the mind file URL
-      try {
-        const updateResponse = await apiRequest('PATCH', `/api/projects/${projectId}`, {
-          targetMindFile: data.mindFileUrl
-        });
+      // Kiểm tra nếu API đã tự động cập nhật dự án
+      if (data.project) {
+        console.log('[DEBUG] Project was automatically updated by the API:', data.project);
         
-        if (!updateResponse.ok) {
-          console.warn('Không thể cập nhật thông tin file .mind cho dự án');
-        } else {
-          // Invalidate query cache to refresh project data
-          queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] });
-          if (onEvaluateComplete) onEvaluateComplete();
+        // Nếu có dự án trả về, sử dụng nó trực tiếp thay vì gửi một yêu cầu PATCH mới
+        // Đảm bảo query cache được cập nhật
+        queryClient.setQueryData([`/api/projects/${projectId}`], data.project);
+        queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+        
+        // Call the complete callback
+        if (onEvaluateComplete) {
+          console.log('[DEBUG] Calling onEvaluateComplete callback directly');
+          onEvaluateComplete();
         }
-      } catch (updateErr) {
-        console.error('Lỗi cập nhật dự án:', updateErr);
+      } else {
+        // Nếu server không tự động cập nhật dự án (phiên bản cũ của API), 
+        // thực hiện cập nhật như trước đây
+        console.log('[DEBUG] Project not updated by API, performing client-side update');
+        
+        try {
+          console.log('[DEBUG] Updating project with mind file URL:', data.mindFileUrl);
+          
+          const updateResponse = await apiRequest('PATCH', `/api/projects/${projectId}`, {
+            targetMindFile: data.mindFileUrl
+          });
+          
+          if (!updateResponse.ok) {
+            console.warn('Không thể cập nhật thông tin file .mind cho dự án');
+          } else {
+            const updatedProject = await updateResponse.json();
+            console.log('[DEBUG] Project updated successfully:', updatedProject);
+            
+            // Invalidate all project queries to ensure UI is updated
+            queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+            queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] });
+            
+            // Call the complete callback
+            if (onEvaluateComplete) {
+              console.log('[DEBUG] Calling onEvaluateComplete callback');
+              onEvaluateComplete();
+            }
+          }
+        } catch (updateErr) {
+          console.error('Lỗi cập nhật dự án:', updateErr);
+        }
       }
 
       toast({

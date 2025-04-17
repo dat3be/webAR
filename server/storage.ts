@@ -161,19 +161,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateProject(id: number, updates: Partial<Project>): Promise<Project> {
-    const [project] = await db.update(projects)
-      .set({
-        ...updates,
-        updatedAt: new Date()
-      })
-      .where(eq(projects.id, id))
-      .returning();
-      
-    if (!project) {
-      throw new Error(`Project with ID ${id} not found`);
-    }
+    console.log(`[Storage] Updating project ${id} with:`, updates);
     
-    return project;
+    try {
+      const [project] = await db.update(projects)
+        .set({
+          ...updates,
+          updatedAt: new Date()
+        })
+        .where(eq(projects.id, id))
+        .returning();
+        
+      if (!project) {
+        throw new Error(`Project with ID ${id} not found`);
+      }
+      
+      console.log(`[Storage] Project ${id} updated successfully:`, project);
+      return project;
+    } catch (error) {
+      console.error(`[Storage] Error updating project ${id}:`, error);
+      throw error;
+    }
   }
 
   async deleteProject(id: number): Promise<void> {

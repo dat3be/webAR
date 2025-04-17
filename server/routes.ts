@@ -656,14 +656,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/generate-mind-file/:id", isAuthenticated, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      console.log(`[API:GenerateMindFile] Starting mind file generation for project ${id}`);
+      
       const project = await storage.getProject(id);
       
       if (!project) {
+        console.log(`[API:GenerateMindFile] Project not found: ${id}`);
         return res.status(404).json({ message: "Project not found" });
+      }
+      
+      // Check if project belongs to the authenticated user
+      if (project.userId !== req.user?.id) {
+        console.log(`[API:GenerateMindFile] Access denied for user ${req.user?.id}`);
+        return res.status(403).json({ message: "Access denied" });
       }
       
       // Check if project has a target image
       if (project.type !== 'image-tracking' || !project.targetImageUrl) {
+        console.log(`[API:GenerateMindFile] Invalid project: type=${project.type}, targetImageUrl=${!!project.targetImageUrl}`);
         return res.status(400).json({ 
           message: "Invalid project type or missing target image",
           details: "Only image-tracking projects with a target image can generate .mind files"
@@ -674,14 +684,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Download the target image from Wasabi
       const targetImageKey = getKeyFromUrl(project.targetImageUrl);
+      console.log(`[API:GenerateMindFile] Downloading target image with key: ${targetImageKey}`);
       const imageBuffer = await downloadFile(targetImageKey);
       
       // Generate a proper .mind file
+      console.log(`[API:GenerateMindFile] Processing target image buffer (${imageBuffer.length} bytes)`);
       const mindFileResult = await generateMindFile(imageBuffer, project.id.toString());
       
       console.log(`[API:GenerateMindFile] .mind file generated successfully: ${mindFileResult.mindFileUrl}`);
       
-      res.status(200).json(mindFileResult);
+      // Tự động cập nhật targetMindFile trong cơ sở dữ liệu 
+      try {
+        console.log(`[API:GenerateMindFile] Updating project in database with new mind file URL`);
+        const updatedProject = await storage.updateProject(id, {
+          targetMindFile: mindFileResult.mindFileUrl
+        });
+        console.log(`[API:GenerateMindFile] Project ${id} updated with targetMindFile: ${updatedProject.targetMindFile}`);
+        
+        // Trả về kết quả cho client bao gồm cả dự án đã cập nhật
+        res.status(200).json({
+          ...mindFileResult,
+          project: updatedProject
+        });
+      } catch (updateError) {
+        console.error(`[API:GenerateMindFile] Error updating project in database:`, updateError);
+        // Vẫn trả về kết quả thành công, nhưng với thông báo lỗi
+        res.status(200).json({
+          ...mindFileResult,
+          updateError: "Failed to update project in database, client should retry update",
+          project: null
+        });
+      }
     } catch (error) {
       console.error("[API:GenerateMindFile] Error generating .mind file:", error);
       handleApiError(error, res);
