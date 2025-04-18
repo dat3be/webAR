@@ -262,10 +262,11 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
         const radius = 2 + Math.floor(scaledScore * 3); // Size based on importance
         const opacity = 0.6 + scaledScore * 0.4;
         
-        // Use different colors for top points vs others
-        const color = i < 20 ? "red" : "lime";
+        // Hiển thị tất cả các điểm dưới dạng vòng tròn đỏ như trong hình mẫu
+        const color = "red";
         
-        svgPoints += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${color}" stroke="black" stroke-width="1" opacity="${opacity}" />`;
+        // Tạo vòng tròn đỏ rỗng bên trong có viền đỏ
+        svgPoints += `<circle cx="${x}" cy="${y}" r="${radius}" fill="none" stroke="${color}" stroke-width="1.5" opacity="${opacity}" />`;
       }
       
       const svgOverlay = `

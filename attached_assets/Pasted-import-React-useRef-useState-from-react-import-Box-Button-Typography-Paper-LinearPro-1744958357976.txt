@@ -1,0 +1,95 @@
+import React, { useRef, useState } from 'react';
+import { Box, Button, Typography, Paper, LinearProgress, Alert } from '@mui/material';
+
+/**
+ * Trang upload ảnh và compile ra file .mind (dùng mind-ar)
+ */
+const CompileMindPage = () => {
+  const [files, setFiles] = useState([]);
+  const [progress, setProgress] = useState(0);
+  const [resultUrl, setResultUrl] = useState(null);
+  const [error, setError] = useState(null);
+  const inputRef = useRef();
+
+  // Hàm load ảnh thành HTMLImageElement
+  const loadImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  // Hàm compile sử dụng mind-ar (gọi dynamic import)
+  const handleCompile = async () => {
+    setError(null);
+    setProgress(0);
+    setResultUrl(null);
+    if (!files.length) return;
+    try {
+      // dynamic import mind-ar để tránh lỗi SSR
+      const mindar = await import('mind-ar');
+      const { Compiler } = await import('mind-ar/dist/mindar-image.prod.js');
+      const compiler = new Compiler();
+      // Load images
+      const images = [];
+      for (let i = 0; i < files.length; i++) {
+        images.push(await loadImage(files[i]));
+      }
+      // Compile
+      const dataList = await compiler.compileImageTargets(images, (percent) => {
+        setProgress(percent);
+      });
+      // Export .mind buffer
+      const buffer = await compiler.exportData();
+      const blob = new Blob([buffer]);
+      setResultUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setError('Không thể compile: ' + e.message);
+    }
+  };
+
+  return (
+    <Box sx={{ maxWidth: 500, mx: 'auto', mt: 4 }}>
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h5" gutterBottom>
+          Compile Ảnh Thành File .mind
+        </Typography>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          ref={inputRef}
+          style={{ display: 'none' }}
+          onChange={e => setFiles(Array.from(e.target.files))}
+        />
+        <Button variant="outlined" onClick={() => inputRef.current.click()} sx={{ mb: 2 }}>
+          Chọn ảnh
+        </Button>
+        {files.length > 0 && (
+          <Box sx={{ mb: 2 }}>
+            {files.map(f => <Typography key={f.name}>{f.name}</Typography>)}
+          </Box>
+        )}
+        <Button variant="contained" color="primary" onClick={handleCompile} disabled={!files.length}>
+          Compile thành .mind
+        </Button>
+        {progress > 0 && progress < 100 && (
+          <Box sx={{ mt: 2 }}>
+            <LinearProgress variant="determinate" value={progress} />
+            <Typography>Đang xử lý: {progress.toFixed(2)}%</Typography>
+          </Box>
+        )}
+        {resultUrl && (
+          <Box sx={{ mt: 2 }}>
+            <Button variant="outlined" href={resultUrl} download="targets.mind">Tải file .mind</Button>
+          </Box>
+        )}
+        {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+      </Paper>
+    </Box>
+  );
+};
+
+export default CompileMindPage;

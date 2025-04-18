@@ -1,0 +1,97 @@
+import React, { useEffect, useRef } from 'react';
+import { Dialog, DialogContent, DialogActions, Button, Typography, Link } from '@mui/material';
+
+// Hàm chuyển ảnh sang grayscale và tìm các điểm biên đơn giản (edge/corner)
+function detectFeaturePoints(image, maxPoints = 60) {
+  // Chuyển ảnh sang grayscale
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(image, 0, 0);
+  const imgData = ctx.getImageData(0, 0, image.width, image.height);
+
+  // Tìm điểm biên đơn giản bằng Sobel hoặc Harris (ở đây dùng thuật toán đơn giản: điểm có gradient lớn)
+  const points = [];
+  for (let y = 1; y < image.height - 1; y++) {
+    for (let x = 1; x < image.width - 1; x++) {
+      const i = (y * image.width + x) * 4;
+      const gx =
+        -imgData.data[i - 4 - image.width * 4] - 2 * imgData.data[i - image.width * 4] - imgData.data[i + 4 - image.width * 4] +
+        imgData.data[i - 4 + image.width * 4] + 2 * imgData.data[i + image.width * 4] + imgData.data[i + 4 + image.width * 4];
+      const gy =
+        -imgData.data[i - 4 - 1] - 2 * imgData.data[i - 1] - imgData.data[i + 4 - 1] +
+        imgData.data[i - 4 + 1] + 2 * imgData.data[i + 1] + imgData.data[i + 4 + 1];
+      const mag = Math.sqrt(gx * gx + gy * gy);
+      if (mag > 80) {
+        points.push({ x, y, mag });
+      }
+    }
+  }
+  // Chọn maxPoints điểm lớn nhất
+  points.sort((a, b) => b.mag - a.mag);
+  return points.slice(0, maxPoints);
+}
+
+const FeaturePointsDialog = ({ open, imageFile, onClose }) => {
+  const canvasRef = useRef();
+  const imgRef = useRef();
+
+  useEffect(() => {
+    if (!open || !imageFile) return;
+    const img = new window.Image();
+    img.onload = () => {
+      // Vẽ ảnh grayscale lên canvas
+      const canvas = canvasRef.current;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      // Lấy data và chuyển sang grayscale
+      const imgData = ctx.getImageData(0, 0, img.width, img.height);
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        const gray = (imgData.data[i] + imgData.data[i + 1] + imgData.data[i + 2]) / 3;
+        imgData.data[i] = imgData.data[i + 1] = imgData.data[i + 2] = gray;
+      }
+      ctx.putImageData(imgData, 0, 0);
+      // Tìm feature points
+      const points = detectFeaturePoints(img);
+      // Vẽ các điểm đỏ lên canvas
+      ctx.save();
+      ctx.strokeStyle = '#f00';
+      ctx.fillStyle = '#f00';
+      points.forEach(({ x, y }) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+      ctx.restore();
+    };
+    img.src = URL.createObjectURL(imageFile);
+    imgRef.current = img;
+    return () => {
+      if (imgRef.current) URL.revokeObjectURL(imgRef.current.src);
+    };
+  }, [open, imageFile]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md">
+      <DialogContent sx={{ textAlign: 'center', p: 2 }}>
+        <canvas ref={canvasRef} style={{ maxWidth: 400, width: '100%', borderRadius: 8 }} />
+        <Typography sx={{ mt: 2 }}>
+          Trải nghiệm AR sẽ ổn định hơn khi số điểm đỏ nhiều hơn<br />
+          <Link href="#" target="_blank" color="error" underline="hover">
+            Cách để lựa chọn một hình nhận diện ổn định
+          </Link>
+        </Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} variant="outlined" color="primary">Đóng</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+export default FeaturePointsDialog;

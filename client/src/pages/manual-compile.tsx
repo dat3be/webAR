@@ -1,371 +1,193 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
+import { Header } from "@/components/Header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, FileImage, Download, RefreshCw, CheckCircle2, AlertCircle, Eye } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { FileUp, Download, AlertCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function ManualCompile() {
-  const { toast } = useToast();
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progressState, setProgressState] = useState<"idle" | "processing" | "done" | "error">("idle");
+  const [files, setFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState(0);
-  const [mindFileUrl, setMindFileUrl] = useState<string | null>(null);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [featurePointsUrl, setFeaturePointsUrl] = useState<string | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   
-  // For direct download
-  const [mindFileBuffer, setMindFileBuffer] = useState<ArrayBuffer | null>(null);
-  
-  // Canvas reference for showing feature points
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: "Lỗi",
-          description: "Vui lòng chọn file ảnh (JPG, PNG)",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setSelectedImage(file);
-      
-      // Create preview URL
-      const fileReader = new FileReader();
-      fileReader.onload = (event) => {
-        if (event.target?.result) {
-          setPreviewUrl(event.target.result as string);
-        }
-      };
-      fileReader.readAsDataURL(file);
-      
-      // Reset state
-      setMindFileUrl(null);
-      setPreviewImageUrl(null);
-      setFeaturePointsUrl(null);
-      setMindFileBuffer(null);
-      setProgressState("idle");
-      setProgress(0);
-    }
+  // Hàm load ảnh thành HTMLImageElement
+  const loadImage = (file: File): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = (err) => reject(err);
+      img.src = URL.createObjectURL(file);
+    });
   };
 
-  const handleUpload = async () => {
-    if (!selectedImage) {
-      toast({
-        title: "Lỗi",
-        description: "Vui lòng chọn một hình ảnh để xử lý",
-        variant: "destructive",
-      });
+  // Hàm compile sử dụng mind-ar (gọi dynamic import) - giống hệt ví dụ mẫu
+  const handleCompile = async () => {
+    setError(null);
+    setProgress(0);
+    setResultUrl(null);
+    setIsProcessing(true);
+    
+    if (!files.length) {
+      setIsProcessing(false);
       return;
     }
-
-    setIsProcessing(true);
-    setProgressState("processing");
     
-    // Simulate progress for better UX
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        const newProgress = prev + (Math.random() * 5);
-        return newProgress > 95 ? 95 : newProgress;
-      });
-    }, 500);
-
     try {
-      // Create form data
-      const formData = new FormData();
-      formData.append('file', selectedImage);
-
-      console.log(`[ManualCompile] Uploading image ${selectedImage.name} (${selectedImage.size} bytes)`);
+      console.log("[ManualCompile] Starting compilation with", files.length, "images");
       
-      // Process image using the backend API
-      const response = await fetch('/api/process-target-image', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      });
-
-      clearInterval(progressInterval);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('[ManualCompile] Processing complete:', result);
-      
-      // Set results
-      setMindFileUrl(result.mindFileUrl);
-      setPreviewImageUrl(result.previewImageUrl);
-      setFeaturePointsUrl(result.featurePointsUrl);
-      
-      // Download the mind file buffer for direct download option
-      if (result.mindFileUrl) {
-        try {
-          const mindFileResponse = await fetch(result.mindFileUrl);
-          if (mindFileResponse.ok) {
-            const arrayBuffer = await mindFileResponse.arrayBuffer();
-            setMindFileBuffer(arrayBuffer);
-          }
-        } catch (err) {
-          console.error("Could not fetch mind file for direct download:", err);
-        }
+      // dynamic import mind-ar để tránh lỗi SSR
+      try {
+        // First import the base module to initialize
+        await import('mind-ar');
+        console.log("Successfully imported mind-ar base module");
+        
+        // Then import the specific module we need
+        const { Compiler } = await import('mind-ar/dist/mindar-image.prod.js');
+        console.log("Successfully imported mindar-image.prod.js");
+        
+        const compiler = new Compiler();
+        console.log("Successfully created compiler instance");
+      } catch (err) {
+        console.error("Failed to load MindAR compiler:", err);
+        throw new Error("Không thể tải thư viện MindAR: " + (err as any).message);
       }
       
-      setProgressState("done");
-      setProgress(100);
+      console.log("[ManualCompile] MindAR compiler loaded");
       
-      toast({
-        title: "Thành công",
-        description: "Đã chuyển đổi hình ảnh thành .mind file",
-      });
-    } catch (error) {
-      console.error('[ManualCompile] Error processing image:', error);
-      clearInterval(progressInterval);
-      setProgressState("error");
-      setProgress(0);
+      // Load images
+      const images: HTMLImageElement[] = [];
+      for (let i = 0; i < files.length; i++) {
+        console.log(`[ManualCompile] Loading image ${i+1}/${files.length}`);
+        images.push(await loadImage(files[i]));
+      }
       
-      toast({
-        title: "Lỗi",
-        description: error instanceof Error ? error.message : "Không thể xử lý hình ảnh",
-        variant: "destructive",
+      console.log("[ManualCompile] All images loaded, starting compilation");
+      
+      // Compile
+      await compiler.compileImageTargets(images, (percent: number) => {
+        console.log(`[ManualCompile] Compilation progress: ${percent.toFixed(2)}%`);
+        setProgress(percent);
       });
+      
+      console.log("[ManualCompile] Compilation complete, exporting data");
+      
+      // Export .mind buffer
+      const buffer = await compiler.exportData();
+      const blob = new Blob([buffer]);
+      const url = URL.createObjectURL(blob);
+      
+      console.log("[ManualCompile] Export complete, result URL created");
+      setResultUrl(url);
+    } catch (e: any) {
+      console.error("[ManualCompile] Compilation error:", e);
+      setError('Không thể compile: ' + e.message);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleDownload = () => {
-    if (mindFileUrl) {
-      window.open(mindFileUrl, '_blank');
-    }
-  };
-  
-  const handleDirectDownload = () => {
-    if (mindFileBuffer) {
-      // Create a blob from the buffer
-      const blob = new Blob([mindFileBuffer]);
-      // Create a download link
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `target_${Date.now()}.mind`;
-      document.body.appendChild(a);
-      a.click();
-      // Cleanup
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      toast({
-        title: "Tải xuống hoàn tất",
-        description: "File .mind đã được tải xuống thiết bị của bạn",
-      });
-    }
-  };
-
-  const resetForm = () => {
-    setSelectedImage(null);
-    setPreviewUrl(null);
-    setMindFileUrl(null);
-    setPreviewImageUrl(null);
-    setFeaturePointsUrl(null);
-    setMindFileBuffer(null);
-    setProgressState("idle");
-    setProgress(0);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files);
+      console.log("[ManualCompile] Selected files:", selectedFiles.map(f => f.name).join(", "));
+      setFiles(selectedFiles);
+      setResultUrl(null);
+      setError(null);
+      setProgress(0);
     }
   };
 
   return (
-    <div className="container mx-auto p-4 py-8 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6 text-center">Công cụ chuyển đổi hình ảnh sang .mind file</h1>
+    <div className="flex flex-col min-h-screen">
+      <Header />
       
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Tạo .mind file từ hình ảnh mục tiêu</CardTitle>
-          <CardDescription>
-            Công cụ này cho phép bạn chuyển đổi một hình ảnh mục tiêu thành file .mind sử dụng cho Image Tracking trong MindAR.
-            Quá trình này có thể mất tới 30 giây tùy vào kích thước hình ảnh.
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="image-upload">Chọn hình ảnh mục tiêu</Label>
-            <Input 
-              id="image-upload" 
-              type="file" 
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handleImageChange} 
-              disabled={isProcessing}
-              className="cursor-pointer"
-            />
-            <p className="text-sm text-muted-foreground">Hình ảnh phải rõ ràng, có độ tương phản cao, không bị mờ để nhận dạng tốt.</p>
-          </div>
+      <main className="container mx-auto py-10 px-4 flex-1">
+        <div className="max-w-md mx-auto">
+          <h1 className="text-3xl font-bold mb-6 text-center">Compile Ảnh Thành File .mind</h1>
           
-          {previewUrl && (
-            <div className="mt-4">
-              <h3 className="text-lg font-medium mb-2">Hình ảnh đã chọn:</h3>
-              <div className="aspect-video bg-black/10 rounded-lg overflow-hidden flex items-center justify-center">
-                <img src={previewUrl} alt="Preview" className="max-h-full object-contain" />
-              </div>
-            </div>
-          )}
-          
-          {progressState !== "idle" && (
-            <div className="space-y-2 mt-4">
-              <div className="flex justify-between items-center">
-                <Label>Tiến trình xử lý</Label>
-                <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
-              </div>
-              <Progress value={progress} className="h-2" />
+          <Card>
+            <CardHeader>
+              <CardTitle>Tạo file .mind từ hình ảnh</CardTitle>
+            </CardHeader>
+            
+            <CardContent className="space-y-6">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                ref={inputRef}
+                className="hidden"
+                onChange={handleFileChange}
+              />
               
-              {progressState === "processing" && (
-                <div className="flex items-center text-yellow-500">
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  <span className="text-sm">Đang xử lý hình ảnh...</span>
+              <Button 
+                variant="outline" 
+                onClick={() => inputRef.current?.click()} 
+                className="w-full"
+              >
+                <FileUp className="mr-2 h-4 w-4" />
+                Chọn ảnh
+              </Button>
+              
+              {files.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-sm font-medium">Đã chọn {files.length} ảnh:</p>
+                  <div className="max-h-32 overflow-y-auto border rounded-md p-2">
+                    {files.map(f => (
+                      <p key={f.name} className="text-sm truncate">{f.name}</p>
+                    ))}
+                  </div>
                 </div>
               )}
               
-              {progressState === "done" && (
-                <div className="flex items-center text-green-500">
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  <span className="text-sm">Xử lý hoàn tất</span>
+              <Button 
+                onClick={handleCompile} 
+                disabled={!files.length || isProcessing}
+                className="w-full"
+              >
+                {isProcessing ? 'Đang xử lý...' : 'Compile thành .mind'}
+              </Button>
+              
+              {isProcessing && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span>Đang xử lý</span>
+                    <span>{progress.toFixed(2)}%</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
                 </div>
               )}
               
-              {progressState === "error" && (
-                <div className="flex items-center text-red-500">
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  <span className="text-sm">Xử lý thất bại</span>
-                </div>
+              {resultUrl && (
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  asChild
+                >
+                  <a href={resultUrl} download="targets.mind">
+                    <Download className="mr-2 h-4 w-4" />
+                    Tải file .mind
+                  </a>
+                </Button>
               )}
-            </div>
-          )}
-          
-          {mindFileUrl && (
-            <div className="rounded-lg border p-4 mt-4">
-              <h3 className="text-lg font-medium mb-2">Kết quả:</h3>
               
-              <Tabs defaultValue="preview">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="preview">Hình ảnh gốc</TabsTrigger>
-                  {featurePointsUrl && (
-                    <TabsTrigger value="features">Đặc trưng hình ảnh</TabsTrigger>
-                  )}
-                </TabsList>
-                
-                <TabsContent value="preview">
-                  {previewImageUrl && (
-                    <div className="aspect-video bg-black/10 rounded-lg overflow-hidden mb-4 flex items-center justify-center">
-                      <img src={previewImageUrl} alt="Preview" className="max-h-full object-contain" />
-                    </div>
-                  )}
-                </TabsContent>
-                
-                {featurePointsUrl && (
-                  <TabsContent value="features">
-                    <div className="aspect-video bg-black/10 rounded-lg overflow-hidden mb-4 flex items-center justify-center">
-                      <img src={featurePointsUrl} alt="Feature Points" className="max-h-full object-contain" />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Các điểm xanh biểu thị các đặc trưng được trích xuất từ hình ảnh để sử dụng trong theo dõi AR.
-                      Hình ảnh với nhiều điểm đặc trưng phân bố đều sẽ có hiệu suất theo dõi tốt hơn.
-                    </p>
-                  </TabsContent>
-                )}
-              </Tabs>
-              
-              <div className="flex flex-col gap-2 mt-4">
-                <p className="text-sm break-all">
-                  <span className="font-medium">Mind File URL:</span> {mindFileUrl}
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <Button 
-                    onClick={handleDownload} 
-                    className="gap-2"
-                  >
-                    <Eye className="h-4 w-4" /> Xem .mind file
-                  </Button>
-                  
-                  {mindFileBuffer && (
-                    <Button 
-                      onClick={handleDirectDownload} 
-                      className="gap-2"
-                      variant="secondary"
-                    >
-                      <Download className="h-4 w-4" /> Tải .mind file
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-        
-        <CardFooter className="flex justify-between">
-          <Button 
-            variant="outline" 
-            onClick={resetForm} 
-            disabled={isProcessing}
-            className="gap-2"
-          >
-            <RefreshCw className="h-4 w-4" /> Làm mới
-          </Button>
-          
-          <Button 
-            onClick={handleUpload} 
-            disabled={!selectedImage || isProcessing} 
-            className="gap-2"
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...
-              </>
-            ) : (
-              <>
-                <FileImage className="h-4 w-4" /> Xử lý hình ảnh
-              </>
-            )}
-          </Button>
-        </CardFooter>
-      </Card>
-      
-      <div className="bg-muted/50 p-4 rounded-lg">
-        <h2 className="text-xl font-medium mb-2">Sử dụng .mind file trong WebAR</h2>
-        <p className="text-sm mb-3">
-          Sau khi tạo .mind file, bạn có thể sử dụng URL của nó trong các dự án AR của mình hoặc 
-          tải về để sử dụng trong các ứng dụng AR khác. Mind file chỉ hoạt động với hình ảnh mục tiêu ban đầu.
-        </p>
-        <div className="bg-slate-800 text-white p-3 rounded-md text-sm">
-          <pre className="whitespace-pre-wrap break-all">
-{`<!-- Sử dụng .mind file trong A-Frame + MindAR -->
-<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
-<a-scene mindar-image="imageTargetSrc: YOUR_MIND_FILE_URL" vr-mode-ui="enabled: false">
-  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-  <a-entity mindar-image-target="targetIndex: 0">
-    <!-- Thêm các đối tượng 3D, video, v.v. ở đây -->
-  </a-entity>
-</a-scene>`}
-          </pre>
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {error}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

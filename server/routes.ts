@@ -95,11 +95,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project routes - most operations require authentication
   app.post("/api/projects", isAuthenticated, async (req, res) => {
     try {
-      console.log("Creating project with authenticated user:", req.user);
+      console.log("[API] Creating project with authenticated user:", req.user?.id);
       
       if (!req.user || !req.user.id) {
         return res.status(401).json({ message: "User not authenticated or invalid user ID" });
       }
+      
+      // Check if we received mindFileUrl 
+      console.log("[API] Project input data:", {
+        name: req.body.name,
+        type: req.body.type,
+        contentType: req.body.contentType,
+        modelUrlProvided: !!req.body.modelUrl,
+        targetImageUrlProvided: !!req.body.targetImageUrl,
+        mindFileUrlProvided: !!req.body.mindFileUrl
+      });
       
       // Add the current user's ID to the project data
       const projectData = insertProjectSchema.parse({
@@ -107,14 +117,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id // Set the userId from the authenticated user
       });
       
-      console.log("Project data to be stored:", projectData);
+      console.log("[API] Project data to be stored:", projectData);
       
       const project = await storage.createProject(projectData);
-      console.log("Project created in database:", project);
+      console.log("[API] Project created in database, ID:", project.id);
       
       res.status(201).json(project);
     } catch (error) {
-      console.error("Error creating project:", error);
+      console.error("[API] Error creating project:", error);
       handleApiError(error, res);
     }
   });
@@ -629,7 +639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           project.id.toString(), 
           project.name, 
           project.targetImageUrl, 
-          project.targetMindFile || project.targetImageUrl, // Sử dụng targetMindFile nếu có, ngược lại dùng targetImageUrl
+          project.mindFileUrl || project.targetImageUrl, // Sử dụng mindFileUrl nếu có, ngược lại dùng targetImageUrl
           project.modelUrl, 
           project.contentType
         );
@@ -694,13 +704,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[API:GenerateMindFile] .mind file generated successfully: ${mindFileResult.mindFileUrl}`);
       
-      // Tự động cập nhật targetMindFile trong cơ sở dữ liệu 
+      // Tự động cập nhật mindFileUrl trong cơ sở dữ liệu 
       try {
         console.log(`[API:GenerateMindFile] Updating project in database with new mind file URL`);
         const updatedProject = await storage.updateProject(id, {
-          targetMindFile: mindFileResult.mindFileUrl
+          mindFileUrl: mindFileResult.mindFileUrl
         });
-        console.log(`[API:GenerateMindFile] Project ${id} updated with targetMindFile: ${updatedProject.targetMindFile}`);
+        console.log(`[API:GenerateMindFile] Project ${id} updated with mindFileUrl: ${updatedProject.mindFileUrl}`);
         
         // Trả về kết quả cho client bao gồm cả dự án đã cập nhật
         res.status(200).json({
