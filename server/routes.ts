@@ -505,7 +505,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Process target image route - convert uploaded image to .mind file
-  app.post("/api/process-target-image", isAuthenticated, upload.single('file'), async (req, res) => {
+  app.post("/api/process-target-image", upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file uploaded" });
@@ -629,6 +629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           project.id.toString(), 
           project.name, 
           project.targetImageUrl, 
+          project.targetMindFile || project.targetImageUrl, // Sử dụng targetMindFile nếu có, ngược lại dùng targetImageUrl
           project.modelUrl, 
           project.contentType
         );

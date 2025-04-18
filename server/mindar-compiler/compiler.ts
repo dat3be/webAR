@@ -281,6 +281,7 @@ function extractTrackingFeatures(imageList: ScaledImage[], progressCallback: (in
  */
 export class MindARCompiler {
   private data: any[] = [];
+  private featurePoints: Point[] = [];
 
   /**
    * Build a list of images with different scales for tracking
@@ -297,11 +298,34 @@ export class MindARCompiler {
   }
 
   /**
+   * Get feature points extracted during compilation
+   * @returns Array of feature points with x, y coordinates
+   */
+  getFeaturePoints(): Point[] {
+    return this.featurePoints.map(point => ({
+      x: point.x,
+      y: point.y,
+      score: point.score
+    }));
+  }
+  
+  /**
+   * Get all tracking data including feature points and more details
+   * @returns Complete tracking data object
+   */
+  getTrackingData() {
+    return this.data.length > 0 ? this.data[0].trackingData : [];
+  }
+
+  /**
    * Compile image targets to generate .mind file data
    * @param imageBuffers List of image buffers to compile
    * @returns Promise that resolves when compilation is complete
    */
   async compileImageTargets(imageBuffers: Buffer[]): Promise<void> {
+    // Reset feature points
+    this.featurePoints = [];
+    
     // Process each image
     const targetImages = [];
     for (let i = 0; i < imageBuffers.length; i++) {
@@ -340,6 +364,17 @@ export class MindARCompiler {
         // Progress callback - could be used to report progress
         console.log(`Processing tracking feature extraction: ${index}/${imageList.length}`);
       });
+      
+      // Store all points for visualization
+      if (trackingData && trackingData.length > 0) {
+        // Take the points from the first image (highest resolution)
+        const firstTrackingData = trackingData[0];
+        if (firstTrackingData.points && firstTrackingData.points.length > 0) {
+          // Save a copy of all feature points for visualization
+          this.featurePoints = [...firstTrackingData.points];
+          console.log(`[MindAR] Extracted ${this.featurePoints.length} feature points`);
+        }
+      }
       
       this.data.push({ targetImage, trackingData });
     }

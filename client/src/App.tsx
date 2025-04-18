@@ -6,7 +6,8 @@ import Dashboard from "@/pages/dashboard";
 import CreateProject from "@/pages/create-project";
 import ViewProject from "@/pages/view-project";
 import ARDemo from "@/pages/ar-demo";
-import ReactARView from "@/pages/react-ar-view";
+import ARFallbackView from "@/pages/ar-fallback-view";
+import ManualCompile from "@/pages/manual-compile";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import { ProtectedRoute } from "@/lib/protected-route";
@@ -48,13 +49,19 @@ function App() {
           {(params) => <ViewProject projectId={params.projectId} />}
         </Route>
         <Route path="/project-ar/:projectId">
-          {(params) => <ReactARView projectId={params.projectId} />}
+          {(params) => <ARFallbackView projectId={params.projectId} />}
         </Route>
         <Route path="/direct-ar/:projectId">
-          {(params) => <ReactARView projectId={params.projectId} />}
+          {(params) => <ARFallbackView projectId={params.projectId} />}
         </Route>
         <Route path="/react-ar/:projectId">
-          {(params) => <ReactARView projectId={params.projectId} />}
+          {(params) => <ARFallbackView projectId={params.projectId} />}
+        </Route>
+        <Route path="/fallback-ar/:projectId">
+          {(params) => <ARFallbackView projectId={params.projectId} />}
+        </Route>
+        <Route path="/manual-compile">
+          <ManualCompile />
         </Route>
         <Route path="/demo/ar">
           <ARDemo />

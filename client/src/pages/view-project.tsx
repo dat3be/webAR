@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, ArrowLeft, Share2, Edit, Check, Info, Download, Smartphone,
-  ExternalLink, ScanFace
+  ExternalLink, ScanFace, Glasses
 } from "lucide-react";
 import { ModelViewer } from "@/components/ModelViewer";
 import React from "react";
@@ -293,14 +293,26 @@ export default function ViewProject({ projectId }: ViewProjectProps) {
             
             {/* Actions */}
             <div className="flex flex-col space-y-4">
-              <Button 
-                size="lg" 
-                className="w-full gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-                onClick={viewAR}
-              >
-                <Smartphone className="h-5 w-5" />
-                <span>Trải nghiệm AR ngay</span>
-              </Button>
+              <div className="space-y-3">
+                <Button 
+                  size="lg" 
+                  className="w-full gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                  onClick={viewAR}
+                >
+                  <Smartphone className="h-5 w-5" />
+                  <span>Trải nghiệm AR đầy đủ</span>
+                </Button>
+                
+                <Button 
+                  size="lg" 
+                  variant="outline"
+                  className="w-full gap-2 border-blue-200 hover:bg-blue-50"
+                  onClick={() => navigate(`/fallback-ar/${projectId}`)}
+                >
+                  <Glasses className="h-5 w-5" />
+                  <span>Phiên bản đơn giản</span>
+                </Button>
+              </div>
               
               {project.targetMindFile && (
                 <Button

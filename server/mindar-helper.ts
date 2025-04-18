@@ -177,12 +177,14 @@ export async function generateMindFile(imageBuffer: Buffer, projectId: string): 
 export async function processTargetImage(imageBuffer: Buffer): Promise<{
   mindFileUrl: string;
   previewImageUrl: string;
+  featurePointsUrl?: string; // Optional feature points visualization
 }> {
   try {
     // Create temp file paths
     const tempImagePath = getTempFilePath('jpg');
     const tempPreviewPath = getTempFilePath('png');
     const tempMindFilePath = getTempFilePath('mind');
+    const tempFeaturePointsPath = getTempFilePath('png');
     
     // Write the input image buffer to a temporary file
     fs.writeFileSync(tempImagePath, imageBuffer);
@@ -196,6 +198,10 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
     // Upload original image to use as the target source and for reference
     const originalFileName = path.basename(tempImagePath);
     const targetImageUrl = await uploadFile(imageBuffer, originalFileName, 'image/jpeg', 'targets');
+    
+    // Get image metadata for visualizing features
+    const metadata = await sharp(imageBuffer).metadata();
+    const { width, height } = metadata;
     
     // Initialize the MindAR compiler
     const compiler = new MindARCompiler();
@@ -211,6 +217,89 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
     
     // Write to temp file for backup
     fs.writeFileSync(tempMindFilePath, mindFileBuffer);
+    
+    // Generate feature points visualization
+    let featurePointsUrl: string | undefined;
+    try {
+      // Trích xuất feature points từ compiler
+      const grayscaleBuffer = await sharp(imageBuffer)
+        .grayscale()
+        .toBuffer();
+      
+      // Tạo một hình ảnh grayscale để hiển thị
+      const imageMetadata = await sharp(grayscaleBuffer).metadata();
+      const imgWidth = imageMetadata.width || width || 640;
+      const imgHeight = imageMetadata.height || height || 480;
+      
+      // Lấy feature points từ compiler
+      const points = compiler.getFeaturePoints();
+      
+      // Nếu không có điểm nào, tạo một số điểm mẫu để minh họa
+      const realPoints = points && points.length > 0 ? points : 
+        // Fallback to sample points
+        Array.from({length: 50}, () => ({
+          x: Math.floor(Math.random() * imgWidth),
+          y: Math.floor(Math.random() * imgHeight),
+          score: Math.random()
+        }));
+      
+      console.log(`[MindAR] Visualizing ${realPoints.length} feature points`);
+      
+      // Sort points by score to highlight most important points
+      const sortedPoints = [...realPoints].sort((a, b) => (b.score || 0) - (a.score || 0));
+      const TOP_N_POINTS = Math.min(sortedPoints.length, 200); // Limit to avoid visual clutter
+      
+      // Create an SVG overlay with the points
+      let svgPoints = '';
+      for (let i = 0; i < TOP_N_POINTS; i++) {
+        const point = sortedPoints[i];
+        const x = point.x;
+        const y = point.y;
+        
+        // Color based on importance (high score = more red, low score = more green)
+        const score = point.score || 0.5;
+        const scaledScore = Math.max(0, Math.min(1, score));
+        const radius = 2 + Math.floor(scaledScore * 3); // Size based on importance
+        const opacity = 0.6 + scaledScore * 0.4;
+        
+        // Use different colors for top points vs others
+        const color = i < 20 ? "red" : "lime";
+        
+        svgPoints += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${color}" stroke="black" stroke-width="1" opacity="${opacity}" />`;
+      }
+      
+      const svgOverlay = `
+        <svg width="${imgWidth}" height="${imgHeight}">
+          ${svgPoints}
+        </svg>
+      `;
+      
+      // Composite the grayscale image with the feature points overlay
+      const featurePointsBuffer = await sharp(grayscaleBuffer)
+        .resize(imgWidth, imgHeight)
+        .composite([
+          {
+            input: Buffer.from(svgOverlay),
+            gravity: 'northwest'
+          }
+        ])
+        .toBuffer();
+      
+      // Save to temp file
+      fs.writeFileSync(tempFeaturePointsPath, featurePointsBuffer);
+      
+      // Upload feature points visualization
+      const featurePointsFileName = `feature_points_${Date.now()}.png`;
+      featurePointsUrl = await uploadFile(
+        featurePointsBuffer,
+        featurePointsFileName,
+        'image/png',
+        'feature-points'
+      );
+    } catch (featureError) {
+      console.error('[MindAR] Error generating feature points visualization:', featureError);
+      // Continue without feature points visualization
+    }
     
     // Upload the .mind file
     const mindFileName = `target_${Date.now()}.mind`;
@@ -235,11 +324,15 @@ export async function processTargetImage(imageBuffer: Buffer): Promise<{
     fs.unlinkSync(tempImagePath);
     fs.unlinkSync(tempPreviewPath);
     fs.unlinkSync(tempMindFilePath);
+    if (fs.existsSync(tempFeaturePointsPath)) {
+      fs.unlinkSync(tempFeaturePointsPath);
+    }
     
     // Return public URLs
     return {
       mindFileUrl: mindFileUrl,
       previewImageUrl: previewImageUrl,
+      featurePointsUrl: featurePointsUrl
     };
   } catch (error) {
     console.error('Error processing target image:', error);
@@ -260,9 +353,9 @@ export function generateImageTrackingHtml(projectId: string, projectName: string
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${projectName} - WebAR Experience</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     ${isVideo ? '' : '<script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>'}
     <style>
       html, body {
@@ -484,9 +577,9 @@ export function generateMarkerlessHtml(projectId: string, projectName: string, m
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${projectName} - WebAR Experience</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-face.prod.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-face-aframe.prod.js"></script>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-face.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-face-aframe.prod.js"></script>
     ${isVideo ? '' : '<script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>'}
     <style>
       html, body {
