@@ -10,11 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModelUpload } from "@/components/ui/model-upload";
 import { ImageTargetUpload } from "@/components/ui/image-target-upload";
-import { ImageEvaluator } from "@/components/ui/image-evaluator";
+
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { uploadFile } from "@/lib/fileUpload";
-import { Loader2, Image, Box, Film, Square, AlertCircle, FileUp } from "lucide-react";
+import { Loader2, Image, Box, Film, Square, AlertCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Alert } from "@/components/ui/alert";
 import { MindARCompiler } from "@/lib/mindar-compiler";
