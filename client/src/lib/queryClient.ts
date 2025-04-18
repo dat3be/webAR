@@ -1,86 +1,83 @@
-import {
-  QueryClient,
-  QueryFunction
-} from "@tanstack/react-query";
+import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-// Create a query client instance with default options
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 10 * 60 * 1000, // 10 minutes
-      refetchOnWindowFocus: true,
-      refetchOnMount: true,
-      retry: 1,
-    },
-  },
-});
-
-// Base URL for API
-const API_BASE_URL = "";
-
-type ApiRequestMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
-
-interface GetQueryFnOptions {
-  on401?: "throw" | "returnNull";
+async function throwIfResNotOk(res: Response) {
+  if (!res.ok) {
+    let text;
+    try {
+      // Try to get the response text, but it may have been read already
+      text = await res.text();
+    } catch (e) {
+      // If we can't read the text (e.g. it was already read), use the status text
+      text = res.statusText;
+    }
+    
+    throw new Error(`${res.status}: ${text || 'Unknown error'}`);
+  }
 }
 
-// Default query function for use with react-query
-export function getQueryFn({ on401 = "throw" }: GetQueryFnOptions = {}): QueryFunction {
-  return async ({ queryKey }) => {
-    const [endpoint] = queryKey as string[];
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      headers: {
-        "Content-Type": "application/json",
-      },
+export async function apiRequest(
+  method: string,
+  url: string,
+  data?: unknown | undefined,
+): Promise<Response> {
+  console.log(`API Request: ${method} ${url}`, data);
+  
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: data ? { "Content-Type": "application/json" } : {},
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+    
+    console.log(`API Response status: ${res.status}`);
+    
+    if (!res.ok) {
+      try {
+        const errorText = await res.text();
+        console.error(`API Error ${res.status}: ${errorText}`);
+        throw new Error(`${res.status}: ${errorText || 'Unknown error'}`);
+      } catch (e) {
+        console.error(`Failed to parse error response: ${e}`);
+        throw new Error(`Request failed with status ${res.status}`);
+      }
+    }
+    return res;
+  } catch (error) {
+    console.error(`API Request Error for ${method} ${url}:`, error);
+    throw error;
+  }
+}
+
+type UnauthorizedBehavior = "returnNull" | "throw";
+export const getQueryFn: <T>(options: {
+  on401: UnauthorizedBehavior;
+}) => QueryFunction<T> =
+  ({ on401: unauthorizedBehavior }) =>
+  async ({ queryKey }) => {
+    const res = await fetch(queryKey[0] as string, {
       credentials: "include",
     });
 
-    if (!response.ok) {
-      if (response.status === 401 && on401 === "returnNull") {
-        return null;
-      }
-      throw new Error(`API error: ${response.status} ${await response.text()}`);
+    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      return null;
     }
 
-    return await response.json();
+    await throwIfResNotOk(res);
+    return await res.json();
   };
-}
 
-// Function to make API requests
-export async function apiRequest(
-  method: ApiRequestMethod,
-  endpoint: string,
-  data?: any
-): Promise<Response> {
-  const url = `${API_BASE_URL}${endpoint}`;
-  
-  const options: RequestInit = {
-    method,
-    headers: {
-      "Content-Type": "application/json",
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: getQueryFn({ on401: "throw" }),
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: Infinity,
+      retry: false,
     },
-    credentials: "include",
-  };
-
-  if (data && method !== "GET") {
-    options.body = JSON.stringify(data);
-  }
-
-  const response = await fetch(url, options);
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    let errorMessage;
-    
-    try {
-      const errorJson = JSON.parse(errorText);
-      errorMessage = errorJson.message || errorText;
-    } catch (e) {
-      errorMessage = errorText || `API error: ${response.status}`;
-    }
-    
-    throw new Error(errorMessage);
-  }
-  
-  return response;
-}
+    mutations: {
+      retry: false,
+    },
+  },
+});

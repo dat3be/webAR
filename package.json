@@ -16,7 +16,7 @@
     "@aws-sdk/s3-request-presigner": "^3.787.0",
     "@hookform/resolvers": "^3.9.1",
     "@jridgewell/trace-mapping": "^0.3.25",
-    "@msgpack/msgpack": "^3.1.1",
+    "@maherboughdiri/mind-ar-compiler": "github:mboughdiri/mind-ar-compiler",
     "@neondatabase/serverless": "^0.10.4",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-alert-dialog": "^1.1.2",

@@ -35,7 +35,7 @@ export const projects = pgTable("projects", {
   contentType: contentTypeEnum("content_type").notNull(), // "3d-model" or "video"
   modelUrl: text("model_url").notNull(), // URL to the 3D model or video
   targetImageUrl: text("target_image_url"), // URL to the target image (for image tracking)
-  mindFileUrl: text("mind_file_url"), // URL to the .mind file generated from the target image
+  targetMindFile: text("target_mind_file"), // URL to the .mind file generated from the target image
   status: statusEnum("status").notNull().default("active"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -86,7 +86,7 @@ export const insertProjectSchema = createInsertSchema(projects).pick({
   contentType: true,
   modelUrl: true,
   targetImageUrl: true,
-  mindFileUrl: true,
+  targetMindFile: true,
   status: true,
 });
 
@@ -97,7 +97,7 @@ export const updateProjectSchema = createInsertSchema(projects).pick({
   contentType: true,
   modelUrl: true,
   targetImageUrl: true,
-  mindFileUrl: true,
+  targetMindFile: true,
   status: true,
 });
 

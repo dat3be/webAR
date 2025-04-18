@@ -10,14 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModelUpload } from "@/components/ui/model-upload";
 import { ImageTargetUpload } from "@/components/ui/image-target-upload";
-
+import { ImageEvaluator } from "@/components/ui/image-evaluator";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { uploadFile } from "@/lib/fileUpload";
-import { Loader2, Image, Box, Film, Square, AlertCircle } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
-import { Alert } from "@/components/ui/alert";
-import { MindARCompiler } from "@/lib/mindar-compiler";
+import { Loader2, Image, Box, Film, Square } from "lucide-react";
 
 export default function CreateProject() {
   const [location, navigate] = useLocation();
@@ -60,65 +57,14 @@ export default function CreateProject() {
     setProgress(Math.floor((completedSteps / steps) * 100));
   }, [name, model, targetImage, arType, detailsComplete, contentComplete, imageTrackingComplete]);
 
-  // State for mind file processing
-  const [processingMindFile, setProcessingMindFile] = useState(false);
-  const [mindFileProgress, setMindFileProgress] = useState(0);
-  const [mindFileUrl, setMindFileUrl] = useState<string | null>(null);
-  const [mindFileBlob, setMindFileBlob] = useState<Blob | null>(null);
-  const [compiler] = useState<MindARCompiler>(new MindARCompiler());
-  
-  // Process target image client-side to create .mind file
-  const processMindFile = async (imageFile: File): Promise<{ mindFileUrl: string, mindFileBlob: Blob }> => {
-    setProcessingMindFile(true);
-    setMindFileProgress(10);
-    console.log("[CreateProject] Starting client-side mind file processing");
-    
-    try {
-      // Create an object URL from the image file
-      const imageUrl = URL.createObjectURL(imageFile);
-      setMindFileProgress(30);
-      console.log("[CreateProject] Image URL created:", imageUrl);
-      
-      // Process the image using MindAR compiler
-      console.log("[CreateProject] Processing image with MindAR compiler");
-      const result = await compiler.processImage(imageUrl);
-      setMindFileProgress(70);
-      console.log("[CreateProject] Image processed successfully:", {
-        imageWidth: result.image.width,
-        imageHeight: result.image.height,
-        totalFeaturePoints: result.points.length
-      });
-      
-      // Get the mind file as ArrayBuffer
-      console.log("[CreateProject] Exporting mind file data");
-      const mindBuffer = compiler.exportData();
-      const mindBlob = new Blob([mindBuffer]);
-      const mindUrl = URL.createObjectURL(mindBlob);
-      
-      console.log("[CreateProject] Mind file created successfully, size:", mindBlob.size, "bytes");
-      setMindFileProgress(100);
-      setProcessingMindFile(false);
-      
-      // Cleanup the image URL
-      URL.revokeObjectURL(imageUrl);
-      
-      return { mindFileUrl: mindUrl, mindFileBlob: mindBlob };
-    } catch (error: any) {
-      console.error("[CreateProject] Error processing mind file:", error);
-      setProcessingMindFile(false);
-      setMindFileProgress(0);
-      throw new Error(`Failed to process mind file: ${error.message || 'Unknown error'}`);
-    }
-  };
-
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!name) {
       toast({
-        title: "Lỗi",
-        description: "Vui lòng nhập tên dự án",
+        title: "Error",
+        description: "Please enter a project name",
         variant: "destructive",
       });
       setCurrentTab("details");
@@ -127,8 +73,8 @@ export default function CreateProject() {
 
     if (!model) {
       toast({
-        title: "Lỗi",
-        description: `Vui lòng tải lên ${contentType === "3d-model" ? "mô hình 3D" : "video"}`,
+        title: "Error",
+        description: `Please upload a ${contentType === "3d-model" ? "3D model" : "video"}`,
         variant: "destructive",
       });
       setCurrentTab("content");
@@ -137,8 +83,8 @@ export default function CreateProject() {
 
     if (arType === "image-tracking" && !targetImage) {
       toast({
-        title: "Lỗi",
-        description: "Vui lòng tải lên hình ảnh mục tiêu cho tracking",
+        title: "Error",
+        description: "Please upload a target image for image tracking",
         variant: "destructive",
       });
       setCurrentTab("target");
@@ -149,60 +95,32 @@ export default function CreateProject() {
 
     try {
       // Upload files to Wasabi Cloud Storage
-      console.log("[CreateProject] Starting file uploads to Wasabi...");
+      console.log("Starting file uploads to Wasabi...");
       
       // Upload model file
-      console.log("[CreateProject] Uploading model file:", model.name);
+      console.log("Uploading model file:", model.name);
       const modelUrl = await uploadFile(model);
-      console.log("[CreateProject] Model uploaded successfully, URL:", modelUrl);
+      console.log("Model uploaded successfully, URL:", modelUrl);
 
-      // Process and upload target image if applicable
+      // Upload target image if applicable
       let targetImageUrl = "";
-      let mindFileUploadUrl = "";
-      
       if (arType === "image-tracking" && targetImage) {
-        // Upload target image
-        console.log("[CreateProject] Uploading target image:", targetImage.name);
+        console.log("Uploading target image:", targetImage.name);
         targetImageUrl = await uploadFile(targetImage);
-        console.log("[CreateProject] Target image uploaded successfully, URL:", targetImageUrl);
-        
-        // Generate mind file from target image
-        try {
-          console.log("[CreateProject] Generating .mind file from target image");
-          const { mindFileUrl, mindFileBlob } = await processMindFile(targetImage);
-          
-          // Upload the mind file
-          console.log("[CreateProject] Uploading .mind file to storage");
-          
-          // Create a File object from the Blob
-          const mindFile = new File([mindFileBlob], `${name.replace(/\s+/g, '_')}_target.mind`, { 
-            type: 'application/octet-stream' 
-          });
-          
-          mindFileUploadUrl = await uploadFile(mindFile);
-          console.log("[CreateProject] Mind file uploaded successfully, URL:", mindFileUploadUrl);
-        } catch (error) {
-          console.error("[CreateProject] Error processing mind file:", error);
-          toast({
-            title: "Cảnh báo",
-            description: "Không thể tạo file .mind từ hình ảnh. Dự án vẫn được tạo nhưng có thể ảnh hưởng đến hiệu suất AR.",
-            variant: "destructive",
-          });
-        }
+        console.log("Target image uploaded successfully, URL:", targetImageUrl);
       }
 
       // Create project in our backend
-      console.log("[CreateProject] Sending project data to backend:", {
+      console.log("Sending project data to backend:", {
         name,
         description,
         type: arType,
         contentType,
         modelUrl,
         targetImageUrl: targetImageUrl || null,
-        mindFileUrl: mindFileUploadUrl || null
       });
       
-      // Add status field and mind file URL to the request body
+      // Add status field to the request body with default "active" value
       const response = await apiRequest("POST", "/api/projects", {
         name,
         description,
@@ -210,28 +128,24 @@ export default function CreateProject() {
         contentType,
         modelUrl,
         targetImageUrl: targetImageUrl || null,
-        mindFileUrl: mindFileUploadUrl || null,
-        status: "active",
+        status: "active", // Ensure status is set properly
       });
       
-      console.log("[CreateProject] Project created successfully:", response);
+      console.log("Project created successfully:", response);
 
       toast({
-        title: "Thành công",
-        description: "Dự án AR đã được tạo thành công",
+        title: "Success",
+        description: "Project created successfully",
         variant: "default"
       });
 
-      // Force invalidate the projects query to ensure immediate data update
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      
       // Redirect to dashboard with refresh flag to force data reload
       navigate("/dashboard?refresh=true");
     } catch (error: any) {
-      console.error("[CreateProject] Error creating project:", error);
+      console.error("Error creating project:", error);
       toast({
-        title: "Lỗi",
-        description: error.message || "Không thể tạo dự án. Vui lòng thử lại.",
+        title: "Error",
+        description: error.message || "Failed to create project. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -545,13 +459,8 @@ export default function CreateProject() {
                   </div>
                   
                   {targetImage && (
-                    <div className="my-4">
-                      <Alert className="bg-blue-50 border-blue-200 text-blue-800">
-                        <AlertCircle className="h-4 w-4 text-blue-600" />
-                        <p className="text-sm">
-                          Hình ảnh mục tiêu đã được tải lên. File .mind sẽ được tự động tạo khi bạn lưu dự án.
-                        </p>
-                      </Alert>
+                    <div className="flex justify-center my-4">
+                      <ImageEvaluator image={targetImage} />
                     </div>
                   )}
                   

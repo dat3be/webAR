@@ -95,21 +95,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project routes - most operations require authentication
   app.post("/api/projects", isAuthenticated, async (req, res) => {
     try {
-      console.log("[API] Creating project with authenticated user:", req.user?.id);
+      console.log("Creating project with authenticated user:", req.user);
       
       if (!req.user || !req.user.id) {
         return res.status(401).json({ message: "User not authenticated or invalid user ID" });
       }
-      
-      // Check if we received mindFileUrl 
-      console.log("[API] Project input data:", {
-        name: req.body.name,
-        type: req.body.type,
-        contentType: req.body.contentType,
-        modelUrlProvided: !!req.body.modelUrl,
-        targetImageUrlProvided: !!req.body.targetImageUrl,
-        mindFileUrlProvided: !!req.body.mindFileUrl
-      });
       
       // Add the current user's ID to the project data
       const projectData = insertProjectSchema.parse({
@@ -117,14 +107,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id // Set the userId from the authenticated user
       });
       
-      console.log("[API] Project data to be stored:", projectData);
+      console.log("Project data to be stored:", projectData);
       
       const project = await storage.createProject(projectData);
-      console.log("[API] Project created in database, ID:", project.id);
+      console.log("Project created in database:", project);
       
       res.status(201).json(project);
     } catch (error) {
-      console.error("[API] Error creating project:", error);
+      console.error("Error creating project:", error);
       handleApiError(error, res);
     }
   });
@@ -515,7 +505,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Process target image route - convert uploaded image to .mind file
-  app.post("/api/process-target-image", upload.single('file'), async (req, res) => {
+  app.post("/api/process-target-image", isAuthenticated, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file uploaded" });
@@ -639,7 +629,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           project.id.toString(), 
           project.name, 
           project.targetImageUrl, 
-          project.mindFileUrl || project.targetImageUrl, // Sử dụng mindFileUrl nếu có, ngược lại dùng targetImageUrl
           project.modelUrl, 
           project.contentType
         );
@@ -667,24 +656,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/generate-mind-file/:id", isAuthenticated, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      console.log(`[API:GenerateMindFile] Starting mind file generation for project ${id}`);
-      
       const project = await storage.getProject(id);
       
       if (!project) {
-        console.log(`[API:GenerateMindFile] Project not found: ${id}`);
         return res.status(404).json({ message: "Project not found" });
-      }
-      
-      // Check if project belongs to the authenticated user
-      if (project.userId !== req.user?.id) {
-        console.log(`[API:GenerateMindFile] Access denied for user ${req.user?.id}`);
-        return res.status(403).json({ message: "Access denied" });
       }
       
       // Check if project has a target image
       if (project.type !== 'image-tracking' || !project.targetImageUrl) {
-        console.log(`[API:GenerateMindFile] Invalid project: type=${project.type}, targetImageUrl=${!!project.targetImageUrl}`);
         return res.status(400).json({ 
           message: "Invalid project type or missing target image",
           details: "Only image-tracking projects with a target image can generate .mind files"
@@ -695,37 +674,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Download the target image from Wasabi
       const targetImageKey = getKeyFromUrl(project.targetImageUrl);
-      console.log(`[API:GenerateMindFile] Downloading target image with key: ${targetImageKey}`);
       const imageBuffer = await downloadFile(targetImageKey);
       
       // Generate a proper .mind file
-      console.log(`[API:GenerateMindFile] Processing target image buffer (${imageBuffer.length} bytes)`);
       const mindFileResult = await generateMindFile(imageBuffer, project.id.toString());
       
       console.log(`[API:GenerateMindFile] .mind file generated successfully: ${mindFileResult.mindFileUrl}`);
       
-      // Tự động cập nhật mindFileUrl trong cơ sở dữ liệu 
-      try {
-        console.log(`[API:GenerateMindFile] Updating project in database with new mind file URL`);
-        const updatedProject = await storage.updateProject(id, {
-          mindFileUrl: mindFileResult.mindFileUrl
-        });
-        console.log(`[API:GenerateMindFile] Project ${id} updated with mindFileUrl: ${updatedProject.mindFileUrl}`);
-        
-        // Trả về kết quả cho client bao gồm cả dự án đã cập nhật
-        res.status(200).json({
-          ...mindFileResult,
-          project: updatedProject
-        });
-      } catch (updateError) {
-        console.error(`[API:GenerateMindFile] Error updating project in database:`, updateError);
-        // Vẫn trả về kết quả thành công, nhưng với thông báo lỗi
-        res.status(200).json({
-          ...mindFileResult,
-          updateError: "Failed to update project in database, client should retry update",
-          project: null
-        });
-      }
+      res.status(200).json(mindFileResult);
     } catch (error) {
       console.error("[API:GenerateMindFile] Error generating .mind file:", error);
       handleApiError(error, res);

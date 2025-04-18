@@ -4,11 +4,9 @@ declare module '@maherboughdiri/mind-ar-compiler' {
     fileName: string;
   }
 
-  class MindARCompiler {
+  export class MindARCompiler {
     constructor();
-    compileImageTargets(images: any[]): Promise<void>;
+    compileImageTargets(images: ImageData[]): Promise<void>;
     exportData(): Promise<Buffer>;
   }
-
-  export default MindARCompiler;
 }
