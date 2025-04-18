@@ -16,7 +16,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { uploadFile } from "@/lib/fileUpload";
 import { Loader2, Image, Box, Film, Square, AlertCircle, FileUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { Alert } from "@/components/ui/alert";
 import { MindARCompiler } from "@/lib/mindar-compiler";
 
 export default function CreateProject() {
@@ -545,13 +544,50 @@ export default function CreateProject() {
                   </div>
                   
                   {targetImage && (
-                    <div className="my-4">
-                      <Alert className="bg-blue-50 border-blue-200 text-blue-800">
-                        <AlertCircle className="h-4 w-4 text-blue-600" />
-                        <p className="text-sm">
-                          Hình ảnh mục tiêu đã được tải lên. File .mind sẽ được tự động tạo khi bạn lưu dự án.
-                        </p>
-                      </Alert>
+                    <div className="flex flex-col items-center my-4 space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                        <ImageFeatureAnalyzer 
+                          image={targetImage} 
+                          onAnalysisComplete={(result) => {
+                            console.log("[CreateProject] Image analysis complete:", result);
+                          }}
+                        />
+                        
+                        <div className="w-full border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
+                          <h3 className="text-base font-medium mb-3 flex items-center gap-2">
+                            <FileUp className="h-4 w-4 text-blue-600" />
+                            <span>Tạo file .mind từ hình ảnh mục tiêu</span>
+                          </h3>
+                          
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                            File .mind chứa dữ liệu để nhận dạng hình ảnh mục tiêu trong AR. 
+                            Bạn có thể tạo file này bằng cách nhấn nút bên dưới, hoặc hệ thống sẽ tự động tạo khi lưu dự án.
+                          </p>
+                          
+                          <MindFileGenerator 
+                            targetImage={targetImage} 
+                            onMindFileGenerated={(url) => {
+                              console.log("[CreateProject] Mind file generated:", url);
+                              // Lưu URL của file mind để sử dụng khi tạo dự án
+                              setMindFileUrl(url);
+                              
+                              // Đã có mindFileUrl, không cần tạo lại khi submit
+                              setMindFileBlob(null);
+                            }}
+                            onGenerationStart={() => {
+                              console.log("[CreateProject] Mind file generation started");
+                            }}
+                            onGenerationError={(error) => {
+                              console.error("[CreateProject] Mind file generation error:", error);
+                              toast({
+                                title: "Lỗi",
+                                description: "Không thể tạo file .mind: " + error,
+                                variant: "destructive",
+                              });
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
                   

@@ -72,18 +72,33 @@ export function FixedMindGenerator({
       const img = await loadImage(selectedFile);
       console.log("Image loaded:", img.width, "x", img.height);
       
-      // Import MindAR compiler dynamically
-      console.log("Importing MindAR compiler...");
+      // Thay vì import dynamic, sẽ dùng CDN script
+      // Lỗi hiện tại là do server trả về HTML thay vì JavaScript module
+      console.log("Importing MindAR compiler via CDN...");
       
-      // First try to import the base module
-      await import('mind-ar');
-      console.log("Base module imported");
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js';
+      script.async = true;
       
-      // Then import the specific module
-      const { Compiler } = await import('mind-ar/dist/mindar-image.prod.js');
-      console.log("Compiler module imported");
+      await new Promise<void>((resolve, reject) => {
+        script.onload = () => {
+          console.log("✓ MindAR script loaded via CDN");
+          resolve();
+        };
+        script.onerror = () => {
+          console.error("✗ Failed to load MindAR script via CDN");
+          reject(new Error("Không thể tải thư viện MindAR"));
+        };
+        document.head.appendChild(script);
+      });
       
-      const compiler = new Compiler();
+      // @ts-ignore - global MINDAR object from CDN script
+      if (!window.MINDAR || !window.MINDAR.IMAGE || !window.MINDAR.IMAGE.Compiler) {
+        throw new Error("Không thể tìm thấy compiler trong thư viện MindAR");
+      }
+      
+      // @ts-ignore
+      const compiler = new window.MINDAR.IMAGE.Compiler();
       console.log("Compiler instance created");
       
       // Start compilation
