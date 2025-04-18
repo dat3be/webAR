@@ -12,7 +12,7 @@ import React from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Project } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { MindFileGenerator } from "@/components/FixedMindFileGenerator";
+import { MindFileGenerator } from "@/components/fixed-mind-generator";
 import { 
   Dialog,
   DialogContent,
