@@ -8,7 +8,6 @@ import ViewProject from "@/pages/view-project";
 import ARDemo from "@/pages/ar-demo";
 import ARFallbackView from "@/pages/ar-fallback-view";
 // import ManualCompile from "@/pages/manual-compile";
-import ClientCompile from "@/pages/client-compile";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import { ProtectedRoute } from "@/lib/protected-route";
@@ -64,9 +63,6 @@ function App() {
         {/* <Route path="/manual-compile">
           <ManualCompile />
         </Route> */}
-        <Route path="/client-compile">
-          <ClientCompile />
-        </Route>
         <Route path="/demo/ar">
           <ARDemo />
         </Route>
